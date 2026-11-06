@@ -1,0 +1,71 @@
+GLM-5.3-Flash (native FP8) on a DGX Station GB300 with an RTX PRO 6000 sidecar
+==============================================================================
+
+This recipe is part of dgx-station-recipes (MIT, copyright 2026 Garner McCloud; see ../LICENSE). Its design is
+Garner McCloud's, from ../deepseek-v4.1-flash: hot experts on the GB300, cold experts computed on the RTX PRO 6000
+by a sidecar, chosen by a static rowmap built from measured route counts; and the recipe's layout (CLI, README,
+RESULTS, LIMITATIONS, NOTICE, verify). Credit for that design belongs to him; mistakes in this port are ours.
+
+
+The model
+---------
+
+zai-org/GLM-5.3-Flash, https://huggingface.co/zai-org/GLM-5.3-Flash, revision
+46a050bec13002ad29ee795c16e61cf4fa3c4a9c. MIT License, Copyright (c) 2026 Z.AI Co., Ltd. This repository downloads
+the weights from the official release and does not redistribute them. The licence text:
+
+  MIT License
+
+  Copyright (c) 2026 Z.AI Co., Ltd
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+
+Included from deepseek-v4.1-flash
+---------------------------------
+
+verify/: the checks and benchmark, copied from ../deepseek-v4.1-flash/verify at commit 8043a68 and changed only
+where GLM-5.3-Flash requires it (git history shows each change). MIT, copyright 2026 Garner McCloud.
+
+verify/data/, unchanged, with the licence files beside them:
+  fixed_prompt.txt   the CODE_TASK of Fraser Price's BRRR bench, repeated ten times; Apache-2.0 (LICENSE.brrr,
+                     SOURCE.brrr)
+  gsm8k-200.jsonl    the first 200 rows of RonanLabs' GSM8K harness; Apache-2.0, Copyright 2026 RonanLabs
+                     (LICENSE.ronanlabs, SOURCE.ronanlabs); the questions are OpenAI's GSM8K, MIT (LICENSE.gsm8k)
+  coding_source.py   Garner McCloud's 1017 frontend overlay builder, used as the coding prompt; MIT
+
+
+Adapted from vLLM
+-----------------
+
+peer/peer_moe.py: experts_fp8 is adapted from vLLM's fused_experts_impl
+(vllm/model_executor/layers/fused_moe/fused_moe.py at commit a2bcb5657a881a002e79d0adab3c6b5e39436121,
+https://github.com/vllm-project/vllm). Copyright contributors to the vLLM project, Apache License 2.0
+(peer/LICENSE.vllm). Changes: the activation is GLM's clamped SwiGLU, an expert map restricts the computation to one
+GPU's experts, and the Triton tile can be passed in. The rest of peer/ calls vLLM's and FlashInfer's public and
+internal functions from the pinned image without copying them.
+
+Used, not included
+------------------
+
+routing/build_mix.py fetches prompts to drive the server while expert routes are counted; none of the prompt text
+is stored in this repository. The rowmap records only per-expert counts. Sources, with their revisions recorded in
+the first line of the generated mix (mix-v1, sha256 9d436e78…): HuggingFaceH4/ultrachat_200k (MIT), CohereLabs/aya_dataset (Apache-2.0), HuggingFaceH4/MATH-500,
+openai/openai_humaneval (MIT), google-research-datasets/mbpp (CC-BY-4.0), princeton-nlp/SWE-bench_Lite,
+gorilla-llm/Berkeley-Function-Calling-Leaderboard (Apache-2.0), vLLM sources (Apache-2.0) and CPython sources (PSF).

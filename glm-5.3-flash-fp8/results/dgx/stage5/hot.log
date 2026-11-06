@@ -1,0 +1,9 @@
+W1106 00:14:13.979000 1 torch/_opaque_base.py:6] torch._opaque_base is deprecated, use torch._custom_class_base instead
+W1106 00:14:13.981000 1 torch/_library/opaque_object.py:288] register_opaque_type is deprecated, use register_custom_class instead
+W1106 00:14:13.981000 1 torch/_library/opaque_object.py:211] typ='value' is deprecated, use typ='constant' instead
+Using default MoE config. Performance might be sub-optimal! Config file not found at /usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/fused_moe/configs/E=202,N=2048,device_name=NVIDIA_GB300,dtype=fp8_w8a8,block_shape=[128,128].json
+hot on NVIDIA GB300 (10, 3)
+layer 20: 202 experts loaded in 1 s
+M=6: 65% of uniform-random routes owned | experts 375 us | bf16 [M,4096] to pinned host 3 us, back 3 us
+M=6: |out - fp32 reference| / |reference| = 4.45e-02
+M=60: 70% of uniform-random routes owned | experts 722 us | bf16 [M,4096] to pinned host 4 us, back 4 us

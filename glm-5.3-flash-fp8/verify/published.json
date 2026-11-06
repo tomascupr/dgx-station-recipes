@@ -1,0 +1,9 @@
+{
+  "reference": "GLM-5.3-Flash (FP8) on a DGX Station GB300 + RTX PRO 6000, peer tier v3, 2026-11-06 (RESULTS.md)",
+  "decode_tok_s": {"C1": 242, "C4": 556, "C8": 617, "C16": 640},
+  "coding_effort_low_tok_s": 249.8,
+  "gsm8k_200": {"n": 200, "correct": 198},
+  "needles_200k": "3/3",
+  "tool_call": "PASS",
+  "notes": "decode: GSM8K questions at T=1.0, effort max, 30 s windows (bench-gb300-peer-v3-20261106T010643Z); coding: 2,048 greedy tokens at effort low; quality from bench-gb300-peer-v3-quality-20261106T011552Z."
+}

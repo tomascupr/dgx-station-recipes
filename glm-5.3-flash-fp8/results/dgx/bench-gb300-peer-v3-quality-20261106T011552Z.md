@@ -1,0 +1,16 @@
+# GLM-5.3-Flash bench --full
+
+Image `vllm/vllm-openai:nightly-a2bcb5657a881a002e79d0adab3c6b5e39436121`, driver ?, GPUs ?, util ?, rowmap `rowmap-mix-v1-h202.json`, recipe commit `?`, GPU KV cache ? tokens. One server session; started 2026-11-06T02:15:52+0100. Medians with the interquartile range in brackets.
+
+## Single stream
+
+| shape | output tok/s | TTFT ms | accepted tokens/step | steps/s | runs |
+|---|---|---|---|---|---|
+
+## Quality (same session)
+
+| check | result |
+|---|---|
+| GSM8K-200 (effort max, T=0.3) | 198/200 (99.0 %) |
+| needles at 200K tokens | 3/3 |
+| tool call | PASS |

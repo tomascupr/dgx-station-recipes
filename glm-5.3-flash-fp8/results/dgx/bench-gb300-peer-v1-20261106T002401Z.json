@@ -1,0 +1,222 @@
+{
+ "schema": "glm53-bench-full-v1",
+ "started": "2026-11-06T01:30:22+0100",
+ "environment": {
+  "image": "vllm/vllm-openai:nightly-a2bcb5657a881a002e79d0adab3c6b5e39436121",
+  "host": "dgx-station (GB300 + RTX PRO 6000 sidecar)",
+  "server": "peer/serve-glm53-peer.sh (peer tier v1): rowmap-mix-v1-h202 (202 hot on GB300, 86 cold on RTX per layer 3-44), Triton experts both sides, eager sidecar, MTP experts in HBM, util 0.97, KV 6 GiB, max-model-len 524288, max-num-seqs 32, max-num-batched-tokens 8192, capture sizes up to 192, MTP 5, FP8 KV",
+  "rowmap": "rowmap-mix-v1-h202.json",
+  "tree_dirty": false
+ },
+ "settings": {
+  "base_url": "http://127.0.0.1:30004",
+  "model": "glm-5.3-flash",
+  "out": "/work/glm53/bench/bench-gb300-peer-v1-20261106T002401Z.json",
+  "env_file": "/work/glm53/bench/bench-gb300-peer-v1-20261106T002401Z.env",
+  "skip": "capacity",
+  "reps": 3,
+  "coding_reps": 2,
+  "prefill_reps": 1,
+  "window": 30.0,
+  "warmup": 10.0,
+  "conc": "4,8,16,32",
+  "capacity_n": 16,
+  "capacity_tokens": 110000,
+  "capacity_max_tokens": 2500,
+  "min_acc": 95.0
+ },
+ "fixed": {
+  "shape": "fixed prompt, greedy, effort low, max_tokens 2048, nonce line first",
+  "runs": [
+   {
+    "prompt_tokens": 2650,
+    "completion_tokens": 2048,
+    "ttft_ms": 231.1,
+    "out_tok_s": 140.8,
+    "tokens_per_step": 3.892,
+    "steps_s": 36.2
+   },
+   {
+    "prompt_tokens": 2651,
+    "completion_tokens": 1970,
+    "ttft_ms": 1632.0,
+    "out_tok_s": 126.6,
+    "tokens_per_step": 3.493,
+    "steps_s": 36.3
+   },
+   {
+    "prompt_tokens": 2650,
+    "completion_tokens": 2023,
+    "ttft_ms": 231.2,
+    "out_tok_s": 129.5,
+    "tokens_per_step": 3.574,
+    "steps_s": 36.3
+   }
+  ],
+  "summary": {
+   "out_tok_s": {
+    "n": 3,
+    "median": 129.5,
+    "q1": 128.05,
+    "q3": 135.15
+   },
+   "ttft_ms": {
+    "n": 3,
+    "median": 231.2,
+    "q1": 231.15,
+    "q3": 931.6
+   },
+   "tokens_per_step": {
+    "n": 3,
+    "median": 3.574,
+    "q1": 3.534,
+    "q3": 3.733
+   },
+   "steps_s": {
+    "n": 3,
+    "median": 36.3,
+    "q1": 36.25,
+    "q3": 36.3
+   },
+   "completion_tokens": {
+    "n": 3,
+    "median": 2023,
+    "q1": 1996.5,
+    "q3": 2035.5
+   },
+   "prompt_tokens": {
+    "n": 3,
+    "median": 2650,
+    "q1": 2650.0,
+    "q3": 2650.5
+   }
+  }
+ },
+ "gsm8k_c1": {
+  "conc": 1,
+  "greedy": false,
+  "window_s": 30.0,
+  "warmup_s": 10.0,
+  "aggregate_tok_s": 148.4,
+  "per_stream_tok_s": 148.4,
+  "tokens_per_step": 4.327,
+  "preemptions": 0.0,
+  "request_errors": 0
+ },
+ "greedy_c1": {
+  "conc": 1,
+  "greedy": true,
+  "window_s": 30.0,
+  "warmup_s": 10.0,
+  "aggregate_tok_s": 123.8,
+  "per_stream_tok_s": 123.8,
+  "tokens_per_step": 3.988,
+  "preemptions": 0.0,
+  "request_errors": 0
+ },
+ "coding": {
+  "shape": "verify/coding.py: coding module prompt, greedy, effort low, exactly 2,048 output tokens",
+  "runs": [
+   {
+    "prompt_tokens": 4141,
+    "completion_tokens": 2048,
+    "ttft_ms": 262.6,
+    "out_tok_s": 149.4,
+    "tokens_per_step": 4.15,
+    "steps_s": 36.0
+   },
+   {
+    "prompt_tokens": 4144,
+    "completion_tokens": 2048,
+    "ttft_ms": 242.5,
+    "out_tok_s": 156.5,
+    "tokens_per_step": 4.332,
+    "steps_s": 36.2
+   }
+  ],
+  "summary": {
+   "out_tok_s": {
+    "n": 2,
+    "median": 152.95,
+    "q1": 151.175,
+    "q3": 154.725
+   },
+   "ttft_ms": {
+    "n": 2,
+    "median": 252.55,
+    "q1": 247.525,
+    "q3": 257.575
+   },
+   "tokens_per_step": {
+    "n": 2,
+    "median": 4.241,
+    "q1": 4.196,
+    "q3": 4.287
+   },
+   "steps_s": {
+    "n": 2,
+    "median": 36.1,
+    "q1": 36.05,
+    "q3": 36.15
+   },
+   "completion_tokens": {
+    "n": 2,
+    "median": 2048.0,
+    "q1": 2048.0,
+    "q3": 2048.0
+   },
+   "prompt_tokens": {
+    "n": 2,
+    "median": 4142.5,
+    "q1": 4141.75,
+    "q3": 4143.25
+   }
+  }
+ },
+ "streams": [
+  {
+   "conc": 4,
+   "greedy": false,
+   "window_s": 30.0,
+   "warmup_s": 10.0,
+   "aggregate_tok_s": 431.1,
+   "per_stream_tok_s": 107.8,
+   "tokens_per_step": 4.215,
+   "preemptions": 0.0,
+   "request_errors": 0
+  },
+  {
+   "conc": 8,
+   "greedy": false,
+   "window_s": 30.0,
+   "warmup_s": 10.0,
+   "aggregate_tok_s": 502.0,
+   "per_stream_tok_s": 62.8,
+   "tokens_per_step": 4.238,
+   "preemptions": 0.0,
+   "request_errors": 0
+  },
+  {
+   "conc": 16,
+   "greedy": false,
+   "window_s": 30.0,
+   "warmup_s": 10.0,
+   "aggregate_tok_s": 491.1,
+   "per_stream_tok_s": 30.7,
+   "tokens_per_step": 4.106,
+   "preemptions": 0.0,
+   "request_errors": 0
+  },
+  {
+   "conc": 32,
+   "greedy": false,
+   "window_s": 30.0,
+   "warmup_s": 10.0,
+   "aggregate_tok_s": 503.6,
+   "per_stream_tok_s": 15.7,
+   "tokens_per_step": 4.223,
+   "preemptions": 0.0,
+   "request_errors": 0
+  }
+ ]
+}

@@ -1,0 +1,54 @@
+[bench] fixed ...
+[bench] fixed done in 113 s
+[bench] gsm8k_c1 ...
+[bench] gsm8k_c1 done in 40 s
+[bench] greedy_c1 ...
+[bench] greedy_c1 done in 40 s
+[bench] coding ...
+[bench] coding done in 94 s
+[bench] streams ...
+[bench] streams done in 167 s
+[bench] prefill ...
+[bench] prefill done in 27 s
+[bench] quality ...
+[bench] quality done in 596 s
+# GLM-5.3-Flash bench --full
+
+Image `vllm/vllm-openai:nightly-a2bcb5657a881a002e79d0adab3c6b5e39436121`, driver ?, GPUs ?, util ?, rowmap `none (stock vLLM, GB300 + Grace)`, recipe commit `09401c6`, GPU KV cache 1135957 tokens. One server session; started 2026-11-06T00:51:53+0100. Medians with the interquartile range in brackets.
+
+## Single stream
+
+| shape | output tok/s | TTFT ms | accepted tokens/step | steps/s | runs |
+|---|---|---|---|---|---|
+| fixed prompt (~2.6K in, 2,048 out, greedy, effort low) | 74.6 (73.6-76.3) | 522 (519-524) | 3.63 (3.57-3.71) | 20.6 (20.6-20.6) | 3 |
+| coding prompt (2,048 out, greedy, effort low) | 64.2 (59.5-68.9) | 568 (567-569) | 3.17 (2.94-3.41) | 20.2 (20.2-20.2) | 2 |
+| GSM8K decode, T=1.0, effort max (30 s window) | 81.6 | — | 4.362 | — | window |
+| GSM8K decode, greedy, effort low (30 s window) | 63.4 | — | 3.901 | — | window |
+
+## Many streams (GSM8K, T=1.0, effort max)
+
+| streams | aggregate tok/s | per stream tok/s | tokens/step | window s |
+|---|---|---|---|---|
+| 4 | 113 | 28.3 | 3.935 | 30 |
+| 8 | 147 | 18.4 | 4.115 | 30 |
+| 16 | 173 | 10.8 | 4.315 | 30 |
+| 32 | 176 | 5.5 | 4.332 | 30 |
+
+## Prefill (uncached)
+
+| prompt tokens | TTFT ms | prefill tok/s |
+|---|---|---|
+| 14963 | 3971 | 3768 |
+| 59786 | 7502 | 7969 |
+| 119512 | 15218 | 7854 |
+
+## Quality (same session)
+
+| check | result |
+|---|---|
+| GSM8K-200 (effort max, T=0.3) | 198/200 (99.0 %) |
+| needles at 200K tokens | 3/3 |
+| tool call | PASS |
+
+[bench] PASS: /work/glm53/bench/bench-gb300-stock-20261105T235133Z.json (+ .md)
+EXIT=0

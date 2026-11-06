@@ -1,0 +1,9 @@
+W1106 00:14:13.971000 1 torch/_opaque_base.py:6] torch._opaque_base is deprecated, use torch._custom_class_base instead
+W1106 00:14:13.972000 1 torch/_library/opaque_object.py:288] register_opaque_type is deprecated, use register_custom_class instead
+W1106 00:14:13.973000 1 torch/_library/opaque_object.py:211] typ='value' is deprecated, use typ='constant' instead
+Using default MoE config. Performance might be sub-optimal! Config file not found at /usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/fused_moe/configs/E=86,N=2048,device_name=NVIDIA_RTX_PRO_6000_Blackwell_Max-Q_Workstation_Edition,dtype=fp8_w8a8,block_shape=[128,128].json
+cold on NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition (12, 0)
+layer 20: 86 experts loaded in 1 s
+M=6: 35% of uniform-random routes owned | experts 364 us | bf16 [M,4096] to pinned host 3 us, back 4 us
+M=6: |out - fp32 reference| / |reference| = 4.35e-02
+M=60: 30% of uniform-random routes owned | experts 1079 us | bf16 [M,4096] to pinned host 9 us, back 11 us

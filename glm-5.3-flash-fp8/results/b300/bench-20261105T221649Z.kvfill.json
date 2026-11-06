@@ -1,0 +1,147 @@
+{
+ "results": [
+  {
+   "id": "fill0",
+   "ok": true,
+   "prompt_tokens": 100027,
+   "completion_tokens": 2500,
+   "finish": "length",
+   "s": 70.2
+  },
+  {
+   "id": "fill1",
+   "ok": true,
+   "prompt_tokens": 100012,
+   "completion_tokens": 2500,
+   "finish": "length",
+   "s": 71.3
+  },
+  {
+   "id": "fill10",
+   "ok": true,
+   "prompt_tokens": 100092,
+   "completion_tokens": 2500,
+   "finish": "length",
+   "s": 72.1
+  },
+  {
+   "id": "fill11",
+   "ok": true,
+   "prompt_tokens": 100139,
+   "completion_tokens": 2500,
+   "finish": "length",
+   "s": 80.9
+  },
+  {
+   "id": "fill12",
+   "ok": true,
+   "prompt_tokens": 100123,
+   "completion_tokens": 2500,
+   "finish": "length",
+   "s": 71.6
+  },
+  {
+   "id": "fill13",
+   "ok": true,
+   "prompt_tokens": 100106,
+   "completion_tokens": 2500,
+   "finish": "length",
+   "s": 71.8
+  },
+  {
+   "id": "fill14",
+   "ok": true,
+   "prompt_tokens": 99927,
+   "completion_tokens": 2500,
+   "finish": "length",
+   "s": 73.8
+  },
+  {
+   "id": "fill15",
+   "ok": true,
+   "prompt_tokens": 99924,
+   "completion_tokens": 2500,
+   "finish": "length",
+   "s": 72.8
+  },
+  {
+   "id": "fill2",
+   "ok": true,
+   "prompt_tokens": 100032,
+   "completion_tokens": 2500,
+   "finish": "length",
+   "s": 74.1
+  },
+  {
+   "id": "fill3",
+   "ok": true,
+   "prompt_tokens": 100028,
+   "completion_tokens": 2500,
+   "finish": "length",
+   "s": 72.0
+  },
+  {
+   "id": "fill4",
+   "ok": true,
+   "prompt_tokens": 100081,
+   "completion_tokens": 2500,
+   "finish": "length",
+   "s": 69.0
+  },
+  {
+   "id": "fill5",
+   "ok": true,
+   "prompt_tokens": 100202,
+   "completion_tokens": 2500,
+   "finish": "length",
+   "s": 73.0
+  },
+  {
+   "id": "fill6",
+   "ok": true,
+   "prompt_tokens": 99940,
+   "completion_tokens": 2500,
+   "finish": "length",
+   "s": 73.2
+  },
+  {
+   "id": "fill7",
+   "ok": true,
+   "prompt_tokens": 100373,
+   "completion_tokens": 2500,
+   "finish": "length",
+   "s": 74.3
+  },
+  {
+   "id": "fill8",
+   "ok": true,
+   "prompt_tokens": 100240,
+   "completion_tokens": 2500,
+   "finish": "length",
+   "s": 69.3
+  },
+  {
+   "id": "fill9",
+   "ok": true,
+   "prompt_tokens": 99975,
+   "completion_tokens": 2500,
+   "finish": "length",
+   "s": 75.6
+  },
+  {
+   "id": "needle",
+   "ok": true,
+   "prompt_tokens": 455217,
+   "reply": "violet-anchor-5817",
+   "s": 55.2
+  }
+ ],
+ "all_ok": true,
+ "kv_usage_max": 0.6248896734333628,
+ "running_max": 16.0,
+ "waiting_max": 16.0,
+ "preemptions": 0.0,
+ "prompt_tokens_total": 2056438,
+ "metric_samples": 81,
+ "metric_sample_misses": 0
+}

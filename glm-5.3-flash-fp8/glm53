@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+# glm53: one command for GLM-5.3-Flash (native FP8) on a DGX Station GB300 + RTX PRO 6000.
+# The lifecycle is serve/serve.sh; the checks are verify/verify.sh; the benchmark is verify/bench_full.py.
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "$0")" && pwd)
+: "${GLM53_HOME:=$HOME/.glm53}"
+CONFIG=${GLM53_CONFIG:-$GLM53_HOME/config.env}
+if [ -f "$CONFIG" ]; then . "$CONFIG"; fi
+. "$ROOT/config/recipe.env"
+: "${GLM53_IMAGE:=$GLM53_SUPPORTED_IMAGE}"
+: "${GLM53_MODEL_DIR:=$GLM53_HOME/models/GLM-5.3-Flash}"
+: "${GLM53_PORT:=30004}" "${GLM53_HOST:=127.0.0.1}" "${GLM53_MAXLEN:=524288}" "${GLM53_MAX_SEQS:=32}"
+export GLM53_HOME GLM53_IMAGE GLM53_IMAGE_DIGEST GLM53_MODEL_DIR GLM53_MODEL_REPO GLM53_MODEL_REV GLM53_SHARDS
+export GLM53_PORT GLM53_HOST GLM53_MAXLEN GLM53_MAX_SEQS GLM53_ROWMAP GLM53_KV_BYTES GLM53_UTIL
+export GLM53_CAPTURE_SIZES GLM53_MTP_TOKENS
+
+log() { printf '[glm53] %s\n' "$*"; }
+die() { printf '[glm53] ERROR: %s\n' "$*" >&2; exit 1; }
+
+usage() {
+  cat <<EOF
+glm53: GLM-5.3-Flash (native FP8) on a DGX Station GB300 + RTX PRO 6000
+
+  glm53 install          check the box, pull the image, download and check the weights (safe to re-run)
+  glm53 up               start the sidecar (RTX) and vLLM (GB300); port $GLM53_PORT
+  glm53 down             stop and remove both containers
+  glm53 status           health, endpoint, containers, GPU memory
+  glm53 verify [--full]  preflight, boot gate, tool call, needles, GSM8K-200, decode and coding vs RESULTS.md
+  glm53 bench [ARGS]     the metrics suite (verify/bench_full.py ARGS; --help for its options)
+  glm53 logs [glm53|glm53-sidecar]
+
+Configuration: $CONFIG (optional; see config/glm53.env.example). Release constants: config/recipe.env.
+EOF
+}
+
+check_box() {
+  local ok=1 names mem cdi
+  [ "$(uname -m)" = aarch64 ] || { log "box: FAIL, needs aarch64 (Grace); found $(uname -m)"; ok=0; }
+  command -v docker >/dev/null || { log "docker: FAIL, install Docker with the NVIDIA Container Toolkit"; ok=0; }
+  if names=$(nvidia-smi --query-gpu=name --format=csv,noheader); then
+    grep -q GB300 <<< "$names" || { log "GPUs: FAIL, no GB300"; ok=0; }
+    grep -q 'RTX PRO 6000' <<< "$names" || { log "GPUs: FAIL, no RTX PRO 6000: the model does not fit in the GB300 alone"; ok=0; }
+  else
+    log "GPUs: FAIL, nvidia-smi does not run"; ok=0
+  fi
+  cdi=$(nvidia-smi --query-gpu=name,uuid --format=csv,noheader | awk -F', ' '/RTX PRO 6000/ { print $2 }')
+  if [ -n "$cdi" ] && ! grep -rqs "$cdi" /etc/cdi /var/run/cdi; then
+    log "CDI: FAIL, no CDI spec names the RTX ($cdi); run: sudo nvidia-ctk cdi generate --output=/var/run/cdi/nvidia.yaml"
+    ok=0
+  fi
+  mem=$(awk '/MemTotal/ { print int($2 / 1048576) }' /proc/meminfo)
+  [ "$mem" -ge 450 ] || { log "host RAM: FAIL, ${mem} GiB; vLLM stages all 284 GiB of routed experts in pinned memory"; ok=0; }
+  [ "$ok" = 1 ] && log "box: PASS (aarch64, GB300 + RTX PRO 6000, CDI, ${mem} GiB RAM)"
+  [ "$ok" = 1 ]
+}
+
+image_ok() {
+  docker image inspect -f '{{join .RepoDigests " "}}' "$GLM53_IMAGE" 2>/dev/null | grep -q "$GLM53_IMAGE_DIGEST"
+}
+
+weights_ok() {
+  [ -f "$GLM53_MODEL_DIR/config.json" ] && [ -f "$GLM53_MODEL_DIR/model.safetensors.index.json" ] &&
+    [ "$(find "$GLM53_MODEL_DIR" -maxdepth 1 -name 'model-*.safetensors' | wc -l)" -eq "$GLM53_SHARDS" ]
+}
+
+cmd_install() {
+  check_box || die "fix the FAIL lines above, then re-run: glm53 install"
+  mkdir -p "$GLM53_HOME"
+  if image_ok; then log "image: PASS ($GLM53_IMAGE)"; else
+    docker pull "$GLM53_IMAGE"
+    image_ok || die "pulled $GLM53_IMAGE but its digest is not $GLM53_IMAGE_DIGEST"
+  fi
+  if weights_ok; then log "weights: PASS ($GLM53_SHARDS shards at $GLM53_MODEL_DIR)"; else
+    mkdir -p "$GLM53_MODEL_DIR"
+    log "downloading $GLM53_MODEL_REPO @ $GLM53_MODEL_REV (306 GiB) to $GLM53_MODEL_DIR"
+    docker run --rm -v "$GLM53_MODEL_DIR:/model" -e HF_XET_HIGH_PERFORMANCE=1 --entrypoint hf "$GLM53_IMAGE" \
+      download "$GLM53_MODEL_REPO" --revision "$GLM53_MODEL_REV" --local-dir /model
+    weights_ok || die "the download finished without all $GLM53_SHARDS shards; re-run: glm53 install"
+  fi
+  log "installed; next: glm53 up"
+}
+
+cmd_status() {
+  local h
+  h=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$GLM53_PORT/health" || true)  # allow-||-true: curl's exit code is the down case, reported below
+  if [ "$h" = 200 ]; then log "healthy: http://$GLM53_HOST:$GLM53_PORT/v1 (model glm-5.3-flash)"; else log "not serving (health $h)"; fi
+  docker ps -a --filter name=glm53 --format '  {{.Names}}: {{.Status}}'
+  nvidia-smi --query-gpu=name,memory.used,memory.total --format=csv,noheader | sed 's/^/  /'
+  [ "$h" = 200 ] && cat <<EOF
+  curl -s http://127.0.0.1:$GLM53_PORT/v1/chat/completions -H 'Content-Type: application/json' \\
+    -d '{"model":"glm-5.3-flash","messages":[{"role":"user","content":"Hello"}],"max_tokens":256}'
+EOF
+  [ "$h" = 200 ]
+}
+
+case "${1:-}" in
+  install) cmd_install ;;
+  up) check_box && image_ok && weights_ok || die "run: glm53 install"; exec "$ROOT/serve/serve.sh" up ;;
+  down) exec "$ROOT/serve/serve.sh" down ;;
+  status) cmd_status ;;
+  verify) shift; exec "$ROOT/verify/verify.sh" "$@" ;;
+  bench) shift; mkdir -p "$GLM53_HOME/bench"
+         exec python3 "$ROOT/verify/bench_full.py" --base-url "http://127.0.0.1:$GLM53_PORT" \
+           --key-file "$ROOT/verify/no-key" --model glm-5.3-flash \
+           --out "$GLM53_HOME/bench/bench-$(date -u +%Y%m%dT%H%M%SZ).json" "$@" ;;
+  logs) exec "$ROOT/serve/serve.sh" logs "${2:-glm53}" ;;
+  -h|--help|help|"") usage ;;
+  *) usage; exit 2 ;;
+esac

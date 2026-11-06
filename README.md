@@ -7,6 +7,7 @@ notices, so you can copy a recipe's directory on its own.
 | recipe | model | extra hardware | single stream | many streams | context |
 |---|---|---|---|---|---|
 | [`deepseek-v4.1-flash/`](deepseek-v4.1-flash/) | DeepSeek-V4.1-Flash-1017 | one RTX PRO 6000 (96 GB) | ~730 tok/s on code, ~500 on reasoning | 1,373 tok/s at 8 streams, 2,524 at 32 | 512K per request, 11.4M-token KV cache |
+| [`glm-5.3-flash-fp8/`](glm-5.3-flash-fp8/) | GLM-5.3-Flash (native FP8) | one RTX PRO 6000 (96 GB) | ~250 tok/s on code, ~240 on reasoning | 617 tok/s at 8 streams, 633 at 32 | 512K per request, ~680K-token KV cache |
 
 Numbers are medians from each recipe's own benchmark on our reference box; the recipe's `README.md` and
 `RESULTS.md` say exactly how they were measured, and its bench command reproduces them on yours.

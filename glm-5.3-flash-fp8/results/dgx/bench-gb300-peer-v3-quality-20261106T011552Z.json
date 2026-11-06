@@ -1,0 +1,63 @@
+{
+ "schema": "glm53-bench-full-v1",
+ "started": "2026-11-06T02:15:52+0100",
+ "environment": {
+  "image": "vllm/vllm-openai:nightly-a2bcb5657a881a002e79d0adab3c6b5e39436121",
+  "host": "dgx-station (GB300 + RTX PRO 6000 sidecar)",
+  "server": "peer/serve-glm53-peer.sh (peer tier v3): v2 + Triton tiles re-tuned as CUDA graphs (peer/tuned from tune_moe.py graph timing), rowmap-mix-v1-h202, sidecar CUDA graphs, MTP experts in HBM, util 0.97, KV 6 GiB, max-model-len 524288, max-num-seqs 32, max-num-batched-tokens 8192, capture sizes up to 192, MTP 5, FP8 KV",
+  "rowmap": "rowmap-mix-v1-h202.json",
+  "tree_dirty": false
+ },
+ "settings": {
+  "base_url": "http://127.0.0.1:30004",
+  "model": "glm-5.3-flash",
+  "out": "/work/glm53/bench/bench-gb300-peer-v3-quality-20261106T011552Z.json",
+  "env_file": "/work/glm53/bench/bench-gb300-peer-v3-quality-20261106T011552Z.env",
+  "skip": "fixed,gsm8k_c1,greedy_c1,coding,streams,prefill,capacity",
+  "reps": 10,
+  "coding_reps": 5,
+  "prefill_reps": 3,
+  "window": 60,
+  "warmup": 20,
+  "conc": "4,8,16,32",
+  "capacity_n": 16,
+  "capacity_tokens": 110000,
+  "capacity_max_tokens": 2500,
+  "min_acc": 95.0
+ },
+ "quality": {
+  "tool_call": {
+   "passed": true,
+   "output": "tool call PASS [('get_weather', '{\"city\":\"Denver\"}')]"
+  },
+  "needles_200k": {
+   "passed": true,
+   "found": 3,
+   "total": 3,
+   "lines": [
+    "needle depth=10% prompt_tokens=182183 time=12s PASS reply='violet-anchor-5817'",
+    "needle depth=50% prompt_tokens=182183 time=12s PASS reply='violet-anchor-5817'",
+    "needle depth=90% prompt_tokens=182183 time=11s PASS reply='violet-anchor-5817'"
+   ]
+  },
+  "gsm8k_200": {
+   "n": 200,
+   "correct": 198,
+   "acc": 99.0,
+   "runaways": 0,
+   "errors": 0,
+   "wall_s": 66,
+   "median_ctoks": 184,
+   "passed": true
+  }
+ },
+ "gates": {
+  "tool_call": true,
+  "needles": true,
+  "gsm8k": true,
+  "capacity": null
+ },
+ "finished": "2026-11-06T02:17:33+0100",
+ "status": "PASS",
+ "failed_stages": []
+}

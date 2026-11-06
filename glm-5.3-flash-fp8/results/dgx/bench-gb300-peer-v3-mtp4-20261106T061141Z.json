@@ -1,0 +1,198 @@
+{
+ "schema": "glm53-bench-full-v1",
+ "started": "2026-11-06T07:11:41+0100",
+ "environment": {
+  "image": "vllm/vllm-openai:nightly-a2bcb5657a881a002e79d0adab3c6b5e39436121",
+  "host": "dgx-station (GB300 + RTX PRO 6000 sidecar)",
+  "server": "peer/serve-glm53-peer.sh (peer tier v3): v2 + Triton tiles re-tuned as CUDA graphs (peer/tuned from tune_moe.py graph timing), rowmap-mix-v1-h202, sidecar CUDA graphs, MTP experts in HBM, util 0.97, KV 6 GiB, max-model-len 524288, max-num-seqs 32, max-num-batched-tokens 8192, capture sizes up to 192, MTP 4, FP8 KV",
+  "rowmap": "rowmap-mix-v1-h202.json",
+  "tree_dirty": false
+ },
+ "settings": {
+  "base_url": "http://127.0.0.1:30004",
+  "model": "glm-5.3-flash",
+  "out": "/work/glm53/bench/bench-gb300-peer-v3-mtp4-20261106T061141Z.json",
+  "env_file": "/work/glm53/bench/bench-gb300-peer-v3-mtp4-20261106T061141Z.env",
+  "skip": "prefill,capacity,quality",
+  "reps": 3,
+  "coding_reps": 2,
+  "prefill_reps": 3,
+  "window": 30.0,
+  "warmup": 10.0,
+  "conc": "4",
+  "capacity_n": 16,
+  "capacity_tokens": 110000,
+  "capacity_max_tokens": 2500,
+  "min_acc": 95.0
+ },
+ "fixed": {
+  "shape": "fixed prompt, greedy, effort low, max_tokens 2048, nonce line first",
+  "runs": [
+   {
+    "prompt_tokens": 2650,
+    "completion_tokens": 2048,
+    "ttft_ms": 240.2,
+    "out_tok_s": 131.9,
+    "tokens_per_step": 3.523,
+    "steps_s": 37.4
+   },
+   {
+    "prompt_tokens": 2650,
+    "completion_tokens": 1761,
+    "ttft_ms": 232.9,
+    "out_tok_s": 124.1,
+    "tokens_per_step": 3.316,
+    "steps_s": 37.4
+   },
+   {
+    "prompt_tokens": 2652,
+    "completion_tokens": 2048,
+    "ttft_ms": 235.4,
+    "out_tok_s": 131.3,
+    "tokens_per_step": 3.51,
+    "steps_s": 37.5
+   }
+  ],
+  "summary": {
+   "out_tok_s": {
+    "n": 3,
+    "median": 131.3,
+    "q1": 127.7,
+    "q3": 131.6
+   },
+   "ttft_ms": {
+    "n": 3,
+    "median": 235.4,
+    "q1": 234.15,
+    "q3": 237.8
+   },
+   "tokens_per_step": {
+    "n": 3,
+    "median": 3.51,
+    "q1": 3.413,
+    "q3": 3.516
+   },
+   "steps_s": {
+    "n": 3,
+    "median": 37.4,
+    "q1": 37.4,
+    "q3": 37.45
+   },
+   "completion_tokens": {
+    "n": 3,
+    "median": 2048,
+    "q1": 1904.5,
+    "q3": 2048.0
+   },
+   "prompt_tokens": {
+    "n": 3,
+    "median": 2650,
+    "q1": 2650.0,
+    "q3": 2651.0
+   }
+  }
+ },
+ "gsm8k_c1": {
+  "conc": 1,
+  "greedy": false,
+  "window_s": 30.0,
+  "warmup_s": 10.0,
+  "aggregate_tok_s": 143.1,
+  "per_stream_tok_s": 143.1,
+  "tokens_per_step": 3.997,
+  "preemptions": 0.0,
+  "request_errors": 0
+ },
+ "greedy_c1": {
+  "conc": 1,
+  "greedy": true,
+  "window_s": 30.0,
+  "warmup_s": 10.0,
+  "aggregate_tok_s": 122.6,
+  "per_stream_tok_s": 122.6,
+  "tokens_per_step": 3.675,
+  "preemptions": 0.0,
+  "request_errors": 0
+ },
+ "coding": {
+  "shape": "verify/coding.py: coding module prompt, greedy, effort low, exactly 2,048 output tokens",
+  "runs": [
+   {
+    "prompt_tokens": 4143,
+    "completion_tokens": 2048,
+    "ttft_ms": 241.6,
+    "out_tok_s": 143.5,
+    "tokens_per_step": 3.848,
+    "steps_s": 37.4
+   },
+   {
+    "prompt_tokens": 4144,
+    "completion_tokens": 2048,
+    "ttft_ms": 246.9,
+    "out_tok_s": 114.0,
+    "tokens_per_step": 3.046,
+    "steps_s": 37.5
+   }
+  ],
+  "summary": {
+   "out_tok_s": {
+    "n": 2,
+    "median": 128.75,
+    "q1": 121.375,
+    "q3": 136.125
+   },
+   "ttft_ms": {
+    "n": 2,
+    "median": 244.25,
+    "q1": 242.925,
+    "q3": 245.575
+   },
+   "tokens_per_step": {
+    "n": 2,
+    "median": 3.447,
+    "q1": 3.247,
+    "q3": 3.647
+   },
+   "steps_s": {
+    "n": 2,
+    "median": 37.45,
+    "q1": 37.425,
+    "q3": 37.475
+   },
+   "completion_tokens": {
+    "n": 2,
+    "median": 2048.0,
+    "q1": 2048.0,
+    "q3": 2048.0
+   },
+   "prompt_tokens": {
+    "n": 2,
+    "median": 4143.5,
+    "q1": 4143.25,
+    "q3": 4143.75
+   }
+  }
+ },
+ "streams": [
+  {
+   "conc": 4,
+   "greedy": false,
+   "window_s": 30.0,
+   "warmup_s": 10.0,
+   "aggregate_tok_s": 427.3,
+   "per_stream_tok_s": 106.8,
+   "tokens_per_step": 3.867,
+   "preemptions": 0.0,
+   "request_errors": 0
+  }
+ ],
+ "gates": {
+  "tool_call": null,
+  "needles": null,
+  "gsm8k": null,
+  "capacity": null
+ },
+ "finished": "2026-11-06T07:15:34+0100",
+ "status": "PASS",
+ "failed_stages": []
+}
