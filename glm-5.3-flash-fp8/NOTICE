@@ -1,10 +1,12 @@
 GLM-5.3-Flash (native FP8) on a DGX Station GB300 with an RTX PRO 6000 sidecar
 ==============================================================================
 
-This recipe is part of dgx-station-recipes (MIT, copyright 2026 Garner McCloud; see ../LICENSE). Its design is
-Garner McCloud's, from ../deepseek-v4.1-flash: hot experts on the GB300, cold experts computed on the RTX PRO 6000
-by a sidecar, chosen by a static rowmap built from measured route counts; and the recipe's layout (CLI, README,
-RESULTS, LIMITATIONS, NOTICE, verify). Credit for that design belongs to him; mistakes in this port are ours.
+This recipe is part of dgx-station-recipes (MIT; see ../LICENSE). Copyright 2026 Tomas Cupr, except the files
+listed below as included from deepseek-v4.1-flash or adapted from vLLM, which keep their authors' copyright.
+
+Its design is Garner McCloud's, from ../deepseek-v4.1-flash: hot experts on the GB300, cold experts computed on the
+RTX PRO 6000 by a sidecar, chosen by a static rowmap built from measured route counts; and the recipe's layout (CLI,
+README, RESULTS, LIMITATIONS, NOTICE, verify). Credit for that design belongs to him; mistakes in this port are ours.
 
 
 The model
@@ -41,7 +43,8 @@ Included from deepseek-v4.1-flash
 ---------------------------------
 
 verify/: the checks and benchmark, copied from ../deepseek-v4.1-flash/verify at commit 8043a68 and changed only
-where GLM-5.3-Flash requires it (git history shows each change). MIT, copyright 2026 Garner McCloud.
+where GLM-5.3-Flash requires it (git history shows each change). MIT, copyright 2026 Garner McCloud; the changes
+copyright 2026 Tomas Cupr.
 
 verify/data/, unchanged, with the licence files beside them:
   fixed_prompt.txt   the CODE_TASK of Fraser Price's BRRR bench, repeated ten times; Apache-2.0 (LICENSE.brrr,

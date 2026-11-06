@@ -89,5 +89,5 @@ used 30 s windows and 3 runs per shape, the B300 runs 60 s and 10: the same shap
 
 ## Licence
 
-The recipe is MIT (`../LICENSE`); the weights are Z.AI's, MIT, downloaded from the official release and not
-redistributed. See `NOTICE`.
+The recipe is MIT (`../LICENSE`), copyright 2026 Tomas Cupr apart from the files `NOTICE` credits to others; the
+weights are Z.AI's, MIT, downloaded from the official release and not redistributed. See `NOTICE`.

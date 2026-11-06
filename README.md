@@ -61,5 +61,6 @@ Then read that recipe's `README.md`.
 
 ## Licence
 
-MIT (see `LICENSE`), copyright 2026 Garner McCloud. Each recipe's `NOTICE` lists the third-party code and data it
-includes and their licences. `glm-5.3-flash-fp8/` follows the design of Garner's `deepseek-v4.1-flash/`.
+MIT (see `LICENSE`), copyright 2026 Garner McCloud; `glm-5.3-flash-fp8/` copyright 2026 Tomas Cupr, apart from the
+files its `NOTICE` credits to others. Each recipe's `NOTICE` lists the third-party code and data it includes and
+their licences. `glm-5.3-flash-fp8/` follows the design of Garner's `deepseek-v4.1-flash/`.
