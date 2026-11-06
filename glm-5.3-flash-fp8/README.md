@@ -1,9 +1,9 @@
 # GLM-5.3-Flash (native FP8) on a DGX Station GB300 (with an RTX PRO 6000 sidecar)
 
 This recipe turns one NVIDIA DGX Station GB300 plus one RTX PRO 6000 into a private, OpenAI-compatible
-[GLM-5.3-Flash](https://huggingface.co/zai-org/GLM-5.3-Flash) server, in the model's native FP8 build: **~220-250
-tok/s single stream** and **~640 tok/s at 8-32 concurrent streams**, against 75 and 176 for the same model on the
-GB300 alone. The checkpoint (306 GiB) is larger than the GB300's memory, so each MoE layer's experts are split, as in
+[GLM-5.3-Flash](https://huggingface.co/zai-org/GLM-5.3-Flash) server, in the model's native FP8 build, **3-4x faster
+than the same model on the GB300 alone**: 217 against 75 tok/s on one stream, 640 against 173 at 16 streams (table
+below). The checkpoint (306 GiB) is larger than the GB300's memory, so each MoE layer's experts are split, as in
 Garner McCloud's [`deepseek-v4.1-flash`](../deepseek-v4.1-flash/) recipe whose design this follows: the 202 experts
 real traffic uses most stay on the GB300, the other 86 live on the RTX, which computes them in a sidecar process.
 
@@ -31,17 +31,30 @@ either top-level or in `chat_template_kwargs`, and the reasoning arrives in the 
 
 ## What you get
 
-| | |
-|---|---|
-| Model | `zai-org/GLM-5.3-Flash` at `46a050be…`: 320B total / 18B active, 288 routed experts per layer, FP8 weights with 128x128 block scales, KDA + sparse-MLA attention, MTP |
-| Endpoint | `http://127.0.0.1:30004/v1` (`/chat/completions`, `/completions`, `/models`), model `glm-5.3-flash` |
-| Single stream | 217 tok/s on the fixed prompt, 250 on code, 242 on sampled reasoning (MTP, ~3.6-4.3 tokens per step) |
-| Many streams | 556 / 617 / 640 / 633 tok/s aggregate at 4 / 8 / 16 / 32 streams |
-| Prefill | ~15.6K tok/s; first token in 1.0 s at 15K tokens, 7.7 s at 119K |
-| Context | 512K tokens per request; a 6 GiB KV cache (~680K tokens in all) |
-| Quality | GSM8K-200 99.0 %, needles 3/3 at 182K tokens, tool call PASS |
+An endpoint at `http://127.0.0.1:30004/v1` (`/chat/completions`, `/completions`, `/models`), model `glm-5.3-flash`:
+`zai-org/GLM-5.3-Flash` at `46a050be…` (320B total / 18B active, FP8 with 128x128 block scales, KDA + sparse-MLA
+attention, MTP), 512K tokens per request, a 6 GiB KV cache (~680K tokens in all). Needles pass 3/3 at 182K tokens
+and the tool call passes.
 
-All from `RESULTS.md`, which also has the same model on two B300s (stock vLLM, the reference) and on the GB300 alone.
+| shape (tok/s unless noted) | GB300 alone | **GB300 + RTX** | **speedup** | 2x B300 (reference) | GB300 + RTX as % of 2x B300 |
+|---|---|---|---|---|---|
+| fixed prompt, 1 stream, greedy | 74.6 | **216.7** | **2.9x** | 350.6 | 62 % |
+| coding prompt, 1 stream, greedy | 64.2 | **249.8** | **3.9x** | 377.1 | 66 % |
+| GSM8K, 1 stream, T=1.0 | 81.6 | **242.2** | **3.0x** | 373.4 | 65 % |
+| GSM8K, 1 stream, greedy | 63.4 | **197.4** | **3.1x** | 302.5 | 65 % |
+| 4 streams, aggregate | 113 | **556** | **4.9x** | 880 | 63 % |
+| 8 streams, aggregate | 147 | **617** | **4.2x** | 1,375 | 45 % |
+| 16 streams, aggregate | 173 | **640** | **3.7x** | 2,175 | 29 % |
+| 32 streams, aggregate | 176 | **633** | **3.6x** | 3,481 | 18 % |
+| prefill, ~15K-token prompt | 3.8K | **14.3K** | **3.8x** | 38.0K | 38 % |
+| prefill, ~120K-token prompt | 7.9K | **15.6K** | **2.0x** | 36.1K | 43 % |
+| GSM8K-200 accuracy | 99.0 % | **99.0 %** | same | 99.0 % | same |
+
+Every row is the same prompts, sampling, MTP setting (5 drafts), image and model flags on all three. The speedup
+is GB300 + RTX against the GB300 alone: the same box and model, with and without the sidecar. Two B300s are a
+ceiling, not a competitor: two larger GPUs that hold the whole model in HBM. The Station gets about two thirds of
+them at one stream, less as streams grow, because the RTX's bandwidth runs out (LIMITATIONS.md, 1). The Station runs
+used 30 s windows and 3 runs per shape, the B300 runs 60 s and 10: the same shapes, fewer samples.
 
 ## Requirements
 

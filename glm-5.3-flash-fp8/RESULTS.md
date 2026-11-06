@@ -5,6 +5,30 @@ the rowmap is built from; on the DGX Station, stock vLLM on the GB300 alone (sta
 sidecar (stage 5, v1-v3), and today's ds41 for context. Every number below names the run it came
 from; the raw records are in `results/b300/`.
 
+## Summary
+
+| shape (tok/s unless noted) | GB300 alone | **GB300 + RTX** | **speedup** | 2x B300 (reference) | GB300 + RTX as % of 2x B300 |
+|---|---|---|---|---|---|
+| fixed prompt, 1 stream, greedy | 74.6 | **216.7** | **2.9x** | 350.6 | 62 % |
+| coding prompt, 1 stream, greedy | 64.2 | **249.8** | **3.9x** | 377.1 | 66 % |
+| GSM8K, 1 stream, T=1.0 | 81.6 | **242.2** | **3.0x** | 373.4 | 65 % |
+| GSM8K, 1 stream, greedy | 63.4 | **197.4** | **3.1x** | 302.5 | 65 % |
+| 4 streams, aggregate | 113 | **556** | **4.9x** | 880 | 63 % |
+| 8 streams, aggregate | 147 | **617** | **4.2x** | 1,375 | 45 % |
+| 16 streams, aggregate | 173 | **640** | **3.7x** | 2,175 | 29 % |
+| 32 streams, aggregate | 176 | **633** | **3.6x** | 3,481 | 18 % |
+| prefill, ~15K-token prompt | 3.8K | **14.3K** | **3.8x** | 38.0K | 38 % |
+| prefill, ~120K-token prompt | 7.9K | **15.6K** | **2.0x** | 36.1K | 43 % |
+| GSM8K-200 accuracy | 99.0 % | **99.0 %** | same | 99.0 % | same |
+
+Every row is the same prompts, sampling, MTP setting (5 drafts), image and model flags on all three. The speedup
+is GB300 + RTX against the GB300 alone: the same box and model, with and without the sidecar. Two B300s are a
+ceiling, not a competitor: two larger GPUs that hold the whole model in HBM. The Station gets about two thirds of
+them at one stream, less as streams grow, because the RTX's bandwidth runs out (LIMITATIONS.md, 1). The Station runs
+used 30 s windows and 3 runs per shape, the B300 runs 60 s and 10: the same shapes, fewer samples. Runs: `bench-gb300-stock-20261105T235133Z`, `bench-gb300-peer-v3-20261106T010643Z` (accuracy:
+`bench-gb300-peer-v3-quality-20261106T011552Z`) in `results/dgx/`, and `bench-20261105T223458Z` (accuracy:
+`bench-20261105T221649Z`) in `results/b300/`. The sections below have each run in full.
+
 ## Reference: stock vLLM on 2x B300, 2026-11-05
 
 This is the number the DGX Station has to beat and the outputs it is checked against. The B300 is the GB300's GPU
