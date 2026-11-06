@@ -232,7 +232,7 @@ the FP8 checkpoint against the RTX's bandwidth, not overhead; 4-bit cold experts
   tokens per step: fixed prompt 223.8 (+3 %), coding 236.7 (-5 %), GSM8K 228.2 (-6 %), greedy 198.4 (=), 4 streams 547
   (-2 %). 5 drafts stay. A 4-draft run made 5-token calls, which the sidecar had no CUDA graph for, so it fell back to
   its Python path (37 steps/s, v1 speed); not a fair point, and not rerun. (`bench-gb300-peer-v3-mtp3-*`, `-mtp4-*`.)
-* *FlashInfer's TRT-LLM kernel for the hot experts* (`peer/trtllm_hot.py`, `peer/trt_test.py`): 8 % faster than the
+* *FlashInfer's TRT-LLM kernel for the hot experts* (experiment code not kept in the recipe): 8 % faster than the
   graph-tuned Triton kernel at 6 tokens (181 against 197 us, the same margin up to 192 tokens), but the two outputs
   differ by 5 % relative, against ~4 % for either against float32; at ~0.7 ms per step it is not worth changing the
   numerics before that difference is understood.
