@@ -1,5 +1,7 @@
 # GLM-5.3-Flash (native FP8) on a DGX Station GB300 (with an RTX PRO 6000 sidecar)
 
+By Tomas Cupr, following the design of Garner McCloud's [`deepseek-v4.1-flash`](../deepseek-v4.1-flash/) recipe.
+
 This recipe turns one NVIDIA DGX Station GB300 plus one RTX PRO 6000 into a private, OpenAI-compatible
 [GLM-5.3-Flash](https://huggingface.co/zai-org/GLM-5.3-Flash) server, in the model's native FP8 build, **3-4x faster
 than the same model on the GB300 alone**: 217 against 75 tok/s on one stream, 640 against 173 at 16 streams (table

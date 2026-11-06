@@ -2,7 +2,7 @@
 
 Work in progress. Measured so far: on an 8x B300 server, the reference server (stock vLLM on two B300s) and the expert routing
 the rowmap is built from; on the DGX Station, stock vLLM on the GB300 alone (stage 4), the peer tier with the RTX
-sidecar (stage 5, v1-v3), and today's ds41 for context. Every number below names the run it came
+sidecar (stage 5, v1-v3), today's ds41 for context, and DeepSeek on the GB300 alone for the root README. Every number below names the run it came
 from; the raw records are in `results/b300/`.
 
 ## Summary
@@ -264,3 +264,29 @@ run without the 32-stream window (v0.31.0 lacks vLLM #60945). `results/dgx/ds41-
 | GSM8K, T=1.0, thinking on, 1 stream | 506.4 |
 | GSM8K, greedy, thinking off, 1 stream | 593.7 |
 | 4 / 8 / 16 streams, aggregate | 1,024 / 1,467 / 2,138 |
+
+## DeepSeek-V4.1-Flash on the GB300 alone, for the root README, 2026-11-06
+
+The root README compares each recipe with its model on the GB300 alone. For DeepSeek that baseline is vLLM's own
+DGX Station configuration (the GB300 row of recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash, `v0.32.0`), with the
+local changes that made it faster on this box: `baseline/serve-deepseek-gb300-stock.sh`. It serves the official
+`-1017` checkpoint, the one Garner's release run used. Measured with Garner's `verify/bench_full.py` at `8043a68`,
+unchanged, release protocol (60 s windows, 20 s warm-up), only the shapes the README shows:
+
+```
+python3 -I ../deepseek-v4.1-flash/verify/bench_full.py --base-url http://127.0.0.1:8000 --key-file <any file> \
+  --out bench-dsv41-gb300-alone.json --skip greedy_c1,coding,prefill,capacity,quality --conc 8,32 --reps 5
+```
+
+| shape (tok/s) | GB300 alone | GB300 + RTX (Garner's release run) | speedup |
+|---|---|---|---|
+| fixed prompt, 1 stream (greedy, thinking off) | 171.1 (3.55 tokens/step, 48 steps/s) | 733.6 (5.43 tokens/step, 135 steps/s) | 4.3x |
+| GSM8K, T=1.0, thinking on, 1 stream | 130.4 | 500.5 | 3.8x |
+| 8 streams, aggregate | 326 | 1,373 | 4.2x |
+| 32 streams, aggregate | 584 (at most 24 run at once) | 2,524 | 4.3x |
+
+Not the same image or flags on both sides, unlike the GLM comparison: each side is its own tuned configuration
+(the GB300 alone uses 3 speculative drafts, since drafts past the third rarely pay when every verified token pulls
+experts over NVLink-C2C; the RTX recipe uses 5, plus its 29 fast paths). The RTX column is Garner's run on his box;
+ds41 on this box measured the same or slightly more (741 / 506 / 1,467 tok/s, the section above). `--max-num-seqs 24`, so 8 of the
+32 streams queue. Run `bench-dsv41-gb300-alone-20261106T104157Z` in `results/dgx/`.

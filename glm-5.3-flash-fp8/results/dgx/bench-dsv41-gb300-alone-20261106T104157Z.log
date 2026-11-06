@@ -1,0 +1,26 @@
+[bench] fixed ...
+[bench] fixed done in 78 s
+[bench] gsm8k_c1 ...
+[bench] gsm8k_c1 done in 80 s
+[bench] streams ...
+[bench] streams done in 161 s
+# ds41 bench --full
+
+Image `?`, driver ?, GPUs ?, util ?, rowmap `?`, recipe commit `?`, GPU KV cache ? tokens. One server session; started 2026-11-06T11:41:57+0100. Medians with the interquartile range in brackets.
+
+## Single stream
+
+| shape | output tok/s | TTFT ms | accepted tokens/step | steps/s | runs |
+|---|---|---|---|---|---|
+| fixed prompt (~2.6K in, 2,048 out, greedy, thinking off) | 171.1 (169.0-172.1) | 232 (232-233) | 3.55 (3.52-3.58) | 48.1 (48.1-48.2) | 5 |
+| GSM8K decode, T=1.0, thinking on (60 s window) | 130.4 | — | 2.764 | — | window |
+
+## Many streams (GSM8K, T=1.0, thinking on)
+
+| streams | aggregate tok/s | per stream tok/s | tokens/step | window s |
+|---|---|---|---|---|
+| 8 | 326 | 40.7 | 2.731 | 60 |
+| 32 | 584 | 18.3 | 2.886 | 60 |
+
+[bench] PASS: /work/bench/bench-dsv41-gb300-alone-20261106T104157Z.json (+ .md)
+EXIT=0

@@ -1,0 +1,149 @@
+{
+ "schema": "ds41-bench-full-v1",
+ "started": "2026-11-06T11:41:57+0100",
+ "environment": {},
+ "settings": {
+  "base_url": "http://127.0.0.1:8000",
+  "model": "deepseek-v4.1-flash",
+  "out": "/work/bench/bench-dsv41-gb300-alone-20261106T104157Z.json",
+  "env_file": null,
+  "skip": "greedy_c1,coding,prefill,capacity,quality",
+  "reps": 5,
+  "coding_reps": 5,
+  "prefill_reps": 3,
+  "window": 60,
+  "warmup": 20,
+  "conc": "8,32",
+  "capacity_n": 16,
+  "capacity_tokens": 110000,
+  "capacity_max_tokens": 2500,
+  "min_acc": 95.0
+ },
+ "fixed": {
+  "shape": "fixed prompt, greedy, thinking off, max_tokens 2048, nonce line first",
+  "runs": [
+   {
+    "prompt_tokens": 2674,
+    "completion_tokens": 2048,
+    "ttft_ms": 232.6,
+    "out_tok_s": 169.0,
+    "tokens_per_step": 3.519,
+    "steps_s": 48.1
+   },
+   {
+    "prompt_tokens": 2670,
+    "completion_tokens": 2048,
+    "ttft_ms": 232.4,
+    "out_tok_s": 172.2,
+    "tokens_per_step": 3.585,
+    "steps_s": 48.0
+   },
+   {
+    "prompt_tokens": 2666,
+    "completion_tokens": 2048,
+    "ttft_ms": 231.3,
+    "out_tok_s": 172.1,
+    "tokens_per_step": 3.579,
+    "steps_s": 48.1
+   },
+   {
+    "prompt_tokens": 2673,
+    "completion_tokens": 2048,
+    "ttft_ms": 233.1,
+    "out_tok_s": 167.6,
+    "tokens_per_step": 3.483,
+    "steps_s": 48.2
+   },
+   {
+    "prompt_tokens": 2670,
+    "completion_tokens": 2048,
+    "ttft_ms": 232.0,
+    "out_tok_s": 171.1,
+    "tokens_per_step": 3.549,
+    "steps_s": 48.2
+   }
+  ],
+  "summary": {
+   "out_tok_s": {
+    "n": 5,
+    "median": 171.1,
+    "q1": 169.0,
+    "q3": 172.1
+   },
+   "ttft_ms": {
+    "n": 5,
+    "median": 232.4,
+    "q1": 232.0,
+    "q3": 232.6
+   },
+   "tokens_per_step": {
+    "n": 5,
+    "median": 3.549,
+    "q1": 3.519,
+    "q3": 3.579
+   },
+   "steps_s": {
+    "n": 5,
+    "median": 48.1,
+    "q1": 48.1,
+    "q3": 48.2
+   },
+   "completion_tokens": {
+    "n": 5,
+    "median": 2048,
+    "q1": 2048.0,
+    "q3": 2048.0
+   },
+   "prompt_tokens": {
+    "n": 5,
+    "median": 2670,
+    "q1": 2670.0,
+    "q3": 2673.0
+   }
+  }
+ },
+ "gsm8k_c1": {
+  "conc": 1,
+  "greedy": false,
+  "window_s": 60.0,
+  "warmup_s": 20,
+  "aggregate_tok_s": 130.4,
+  "per_stream_tok_s": 130.4,
+  "tokens_per_step": 2.764,
+  "preemptions": 0.0,
+  "request_errors": 0
+ },
+ "streams": [
+  {
+   "conc": 8,
+   "greedy": false,
+   "window_s": 60.0,
+   "warmup_s": 20,
+   "aggregate_tok_s": 325.9,
+   "per_stream_tok_s": 40.7,
+   "tokens_per_step": 2.731,
+   "preemptions": 0.0,
+   "request_errors": 0
+  },
+  {
+   "conc": 32,
+   "greedy": false,
+   "window_s": 60.0,
+   "warmup_s": 20,
+   "aggregate_tok_s": 584.3,
+   "per_stream_tok_s": 18.3,
+   "tokens_per_step": 2.886,
+   "preemptions": 0.0,
+   "request_errors": 0
+  }
+ ],
+ "gates": {
+  "tool_call": null,
+  "needles": null,
+  "gsm8k": null,
+  "capacity": null
+ },
+ "finished": "2026-11-06T11:47:16+0100",
+ "status": "PASS",
+ "failed_stages": []
+}
