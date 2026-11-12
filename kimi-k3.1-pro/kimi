@@ -1,0 +1,188 @@
+#!/usr/bin/env bash
+# kimi: one command for Kimi K3.1 Pro on a DGX Station GB300 + RTX PRO 6000, under stock vLLM with 2-bit packed
+# experts (serve/hook/sitecustomize.py). `kimi help` lists the commands.
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "$0")" && pwd)
+: "${KIMI_HOME:=$HOME/.kimi-k31}"
+CONFIG=${KIMI_CONFIG:-$KIMI_HOME/config.env}
+if [ -f "$CONFIG" ]; then . "$CONFIG"; fi
+. "$ROOT/config/recipe.env"
+: "${KIMI_IMAGE:=$KIMI_SUPPORTED_IMAGE}"
+: "${KIMI_NATIVE_DIR:=$KIMI_HOME/models/Kimi-K3.1-Pro}" "${KIMI_MODEL_DIR:=$KIMI_HOME/release/model}"
+: "${KIMI_DRAFT_DIR=$KIMI_HOME/models/Kimi-K3.1-Pro-DSpark-preview}" "${KIMI_PACK_DIRS:=$KIMI_HOME/release/packed}"
+: "${KIMI_PACK_SPLIT:=}" "${KIMI_PORT:=30005}" "${KIMI_HOST:=127.0.0.1}" "${KIMI_MAXLEN:=131072}" "${KIMI_MAX_SEQS:=4}"
+CH=/dev/shm/kimi-peer
+URL="http://127.0.0.1:$KIMI_PORT"
+
+log() { printf '[kimi] %s\n' "$*"; }
+die() { printf '[kimi] ERROR: %s\n' "$*" >&2; exit 1; }
+
+usage() {
+  cat <<EOF
+kimi: Kimi K3.1 Pro (2-bit packed experts) on a DGX Station GB300 + RTX PRO 6000
+
+  kimi install     check the box, pull the image, download the served files (781 GiB) and the draft model
+  kimi install --from-source   download Moonshot's checkpoint (1.45 TiB) instead, for `kimi prepare`
+  kimi prepare     from that checkpoint: the expert-free copy (107 GiB) and the packed experts (674 GiB, ~40 min)
+  kimi up          start the sidecar (RTX) and vLLM (GB300); port $KIMI_PORT, ready after ~5 min
+  kimi down        stop and remove both containers
+  kimi status      health, containers, GPU and host memory
+  kimi verify      speed, long prompts, concurrent requests, decode path against a prefill pass
+  kimi bench       tools/vbench.py: single-stream tokens per second (arguments are passed on)
+  kimi run GPU CMD one-off container on gb300, rtx or cpu with this recipe at /w (tools on PYTHONPATH)
+  kimi logs [kimi|kimi-sidecar]
+
+Configuration: $CONFIG (optional; see config/kimi.env.example). Release constants: config/recipe.env.
+EOF
+}
+
+gpu_uuid() { nvidia-smi --query-gpu=name,uuid --format=csv,noheader | awk -F', ' -v n="$1" '$1 ~ n { print $2; exit }'; }
+
+mounts() {            # the recipe at /w, every data directory at a fixed place
+  local i=0 d
+  MOUNTS=(-v "$ROOT:/w:ro" -v "$(dirname "$KIMI_MODEL_DIR"):/km")
+  PACKS=""
+  IFS=, read -ra dirs <<< "$KIMI_PACK_DIRS"
+  for d in "${dirs[@]}"; do
+    mkdir -p "$d"; MOUNTS+=(-v "$d:/q$i"); PACKS+="${PACKS:+,}/q$i"; i=$((i + 1))
+  done
+  [ ! -d "$KIMI_NATIVE_DIR" ] || MOUNTS+=(-v "$KIMI_NATIVE_DIR:/native:ro")
+  [ -z "$KIMI_DRAFT_DIR" ] || MOUNTS+=(-v "$KIMI_DRAFT_DIR:/draft:ro")
+}
+
+run_in() {            # run_in gb300|rtx|cpu NAME COMMAND
+  local dev=()
+  case "$1" in
+    gb300) dev=(--gpus "device=$(gpu_uuid GB300)") ;;
+    rtx)   dev=(--device "nvidia.com/gpu=$(gpu_uuid 'RTX PRO 6000')") ;;   # by CDI name: one GPU per process
+    cpu)   ;;
+    *) die "run: gb300, rtx or cpu" ;;
+  esac
+  mounts
+  mkdir -p "$KIMI_HOME/cache"
+  docker run --rm --name "$2" "${dev[@]}" --ipc host --network host --ulimit memlock=-1 --cap-add IPC_LOCK \
+    "${MOUNTS[@]}" -v "$KIMI_HOME/cache:/root/.cache" -v "$KIMI_HOME:/out" \
+    -e PYTHONPATH=/w/serve:/w/tools -e TRITON_CACHE_DIR=/root/.cache/triton -e HF_HUB_OFFLINE=1 \
+    -w /w/tools --entrypoint bash "$KIMI_IMAGE" -c "$3"
+}
+
+check_box() {
+  local ok=1 names mem rtx
+  [ "$(uname -m)" = aarch64 ] || { log "box: FAIL, needs aarch64 (Grace); found $(uname -m)"; ok=0; }
+  command -v docker >/dev/null || { log "docker: FAIL, install Docker with the NVIDIA Container Toolkit"; ok=0; }
+  names=$(nvidia-smi --query-gpu=name --format=csv,noheader) || { log "GPUs: FAIL, nvidia-smi does not run"; ok=0; }
+  grep -q GB300 <<< "$names" || { log "GPUs: FAIL, no GB300"; ok=0; }
+  grep -q 'RTX PRO 6000' <<< "$names" || { log "GPUs: FAIL, no RTX PRO 6000 (LIMITATIONS.md, Without the RTX)"; ok=0; }
+  rtx=$(gpu_uuid 'RTX PRO 6000')
+  if [ -n "$rtx" ] && ! grep -rqs "$rtx" /etc/cdi /var/run/cdi; then
+    log "CDI: FAIL, no CDI spec names the RTX; run: sudo nvidia-ctk cdi generate --output=/var/run/cdi/nvidia.yaml"; ok=0
+  fi
+  mem=$(awk '/MemTotal/ { print int($2 / 1048576) }' /proc/meminfo)
+  [ "$mem" -ge 480 ] || { log "host RAM: FAIL, ${mem} GiB; 404 GiB of experts are pinned in it"; ok=0; }
+  [ "$ok" = 1 ] && log "box: PASS (aarch64, GB300 + RTX PRO 6000, CDI, ${mem} GiB RAM)"
+  [ "$ok" = 1 ]
+}
+
+cmd_install() {
+  check_box || die "fix the FAIL lines above, then re-run: kimi install"
+  mkdir -p "$KIMI_HOME"
+  docker image inspect "$KIMI_IMAGE" >/dev/null 2>&1 || { log "pulling $KIMI_IMAGE"; docker pull "$KIMI_IMAGE"; }
+  command -v hf >/dev/null || die "the Hugging Face CLI (hf) is needed for the downloads: pip install -U huggingface_hub"
+  [ -z "$KIMI_DRAFT_DIR" ] || hf download "$KIMI_DRAFT_REPO" --local-dir "$KIMI_DRAFT_DIR"
+  if [ "${1:-}" = --from-source ]; then
+    log "downloading $KIMI_MODEL_REPO @ $KIMI_MODEL_REV to $KIMI_NATIVE_DIR (1.45 TiB; resumes)"
+    hf download "$KIMI_MODEL_REPO" --revision "$KIMI_MODEL_REV" --local-dir "$KIMI_NATIVE_DIR"
+    log "next: kimi prepare"
+  else
+    log "downloading $KIMI_RELEASE_REPO to $KIMI_HOME/release (781 GiB; resumes)"
+    hf download "$KIMI_RELEASE_REPO" --local-dir "$KIMI_HOME/release"
+    log "next: kimi up"
+  fi
+}
+
+cmd_prepare() {
+  [ -f "$KIMI_NATIVE_DIR/config.json" ] || die "no published checkpoint at $KIMI_NATIVE_DIR (kimi install)"
+  local split=""
+  if [ ! -f "$KIMI_MODEL_DIR/model.safetensors.index.json" ]; then
+    log "writing the expert-free checkpoint to $KIMI_MODEL_DIR"
+    run_in cpu kimi-strip "python3 -u kstrip.py /native /km/$(basename "$KIMI_MODEL_DIR") --workers 12"
+  fi
+  mounts
+  [ -z "$KIMI_PACK_SPLIT" ] || split="--split $KIMI_PACK_SPLIT"
+  log "packing the routed experts to $KIMI_PACK_DIRS (layers that have a file are skipped)"
+  run_in rtx kimi-pack "python3 -u krtn.py /native $PACKS $split"
+  log "next: kimi up"
+}
+
+cmd_up() {
+  local gb rtx spec=() peer=() model
+  gb=$(gpu_uuid GB300); rtx=$(gpu_uuid 'RTX PRO 6000')
+  [ -n "$gb" ] || die "no GB300 visible"
+  model=/km/$(basename "$KIMI_MODEL_DIR")
+  [ -f "$KIMI_MODEL_DIR/config.json" ] || die "no expert-free checkpoint at $KIMI_MODEL_DIR (kimi install)"
+  mounts
+  mkdir -p "$KIMI_HOME/cache" "$KIMI_HOME/cache-rtx"
+  cmd_down >/dev/null 2>&1 || true
+  if [ "$KIMI_PEER" -gt 0 ]; then
+    [ -n "$rtx" ] || die "no RTX PRO 6000 visible"
+    docker run -d --name kimi-sidecar --device "nvidia.com/gpu=$rtx" --ipc host --ulimit memlock=-1 --cap-add IPC_LOCK \
+      "${MOUNTS[@]}" -v "$KIMI_HOME/cache-rtx:/root/.cache" -e TRITON_CACHE_DIR=/root/.cache/triton \
+      --entrypoint python3 "$KIMI_IMAGE" -u /w/serve/ksidecar.py "$PACKS" /w/serve/rank-native.json \
+      "$KIMI_PEER_FIRST" "$KIMI_PEER" "$CH" >/dev/null
+    peer=(-e "KIMI_CHANNEL=$CH")
+  fi
+  if [ -n "$KIMI_DRAFT_DIR" ]; then
+    spec=(--speculative-config "{\"model\":\"/draft\",\"num_speculative_tokens\":$KIMI_DRAFT_TOKENS,\"method\":\"dspark\",\"draft_sample_method\":\"probabilistic\"}")
+  fi
+  docker run -d --name kimi --gpus "device=$gb" --ipc host --network host \
+    --ulimit memlock=-1 --ulimit stack=67108864 --cap-add IPC_LOCK --cap-add SYS_NICE --entrypoint numactl \
+    "${MOUNTS[@]}" -v "$KIMI_HOME/cache:/root/.cache" \
+    -e PYTHONPATH=/w/serve/hook:/w/serve -e KIMI_PACK="$PACKS" -e KIMI_RANK=/w/serve/rank-native.json "${peer[@]}" \
+    -e KIMI_HOT="$KIMI_HOT" -e KIMI_PEER="$KIMI_PEER" -e KIMI_PRUNE="$KIMI_PRUNE" -e KIMI_PEER_FIRST="$KIMI_PEER_FIRST" \
+    -e TRITON_CACHE_DIR=/root/.cache/triton -e CUDA_CACHE_PATH=/root/.cache/nv-compute \
+    -e VLLM_ENGINE_READY_TIMEOUT_S=7200 -e HF_HUB_OFFLINE=1 \
+    "$KIMI_IMAGE" --membind=0 vllm serve "$model" --served-model-name kimi-k3.1-pro \
+    --trust-remote-code --language-model-only --kv-cache-dtype fp8 --quantization "$KIMI_QUANT" "${spec[@]}" \
+    --tool-call-parser kimi_k3 --reasoning-parser kimi_k3 --enable-auto-tool-choice \
+    --gpu-memory-utilization "$KIMI_UTIL" --kv-cache-memory-bytes "$KIMI_KV_BYTES" --max-model-len "$KIMI_MAXLEN" \
+    --max-num-seqs "$KIMI_MAX_SEQS" --max-num-batched-tokens 8192 --disable-flashinfer-autotune \
+    --host "$KIMI_HOST" --port "$KIMI_PORT" >/dev/null
+  log "starting: sidecar on the RTX, vLLM on the GB300; waiting for $URL/health"
+  while [ "$(curl -s -o /dev/null -w '%{http_code}' "$URL/health")" != 200 ]; do
+    docker ps --format '{{.Names}}' | grep -qx kimi || die "vLLM stopped: kimi logs"
+    sleep 10
+  done
+  docker logs kimi 2>&1 | grep 'KIMI_PACK selfcheck\|KIMI_PACK ACTIVE' | sed 's/^/[kimi] /'
+  log "ready: $URL/v1 (model kimi-k3.1-pro)"
+}
+
+cmd_down() { docker rm -f kimi kimi-sidecar >/dev/null 2>&1 || true; rm -f "$CH"; log "down"; }
+
+cmd_status() {
+  log "health: $(curl -s -o /dev/null -w '%{http_code}' "$URL/health" || true)"
+  docker ps -a --format '{{.Names}} {{.Status}}' | grep '^kimi' || log "no containers"
+  nvidia-smi --query-gpu=name,memory.used,memory.total --format=csv,noheader
+  free -g | awk 'NR == 2 { print "host memory: " $3 " GiB used, " $7 " GiB available" }'
+}
+
+cmd_verify() {
+  python3 "$ROOT/tools/vbench.py" --url "$URL" --runs 6 --max-tokens 250
+  python3 "$ROOT/tools/kchecks.py" long --url "$URL"
+  python3 "$ROOT/tools/kchecks.py" par --url "$URL"
+  python3 "$ROOT/tools/kchecks.py" decode --url "$URL"
+}
+
+case "${1:-help}" in
+  install) cmd_install "${2:-}" ;;
+  prepare) cmd_prepare ;;
+  up) cmd_up ;;
+  down) cmd_down ;;
+  status) cmd_status ;;
+  verify) cmd_verify ;;
+  bench) shift; python3 "$ROOT/tools/vbench.py" --url "$URL" "$@" ;;
+  run) [ $# -ge 3 ] || die "usage: kimi run gb300|rtx|cpu 'command'"; run_in "$2" "kimi-run-$$" "$3" ;;
+  logs) docker logs --tail "${3:-60}" "${2:-kimi}" 2>&1 ;;
+  help|-h|--help) usage ;;
+  *) usage; exit 1 ;;
+esac

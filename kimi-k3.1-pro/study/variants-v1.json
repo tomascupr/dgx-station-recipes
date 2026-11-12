@@ -1,0 +1,10 @@
+[
+ {"name": "q2-all",              "stats": "out/native/stats.pt", "tiers": [[1.0, "q2"]]},
+ {"name": "t-all",               "stats": "out/native/stats.pt", "tiers": [[1.0, "t"]]},
+ {"name": "prune20",             "stats": "out/native/stats.pt", "tiers": [[0.8, "native"], [0.2, "prune"]]},
+ {"name": "prune40",             "stats": "out/native/stats.pt", "tiers": [[0.6, "native"], [0.4, "prune"]]},
+ {"name": "n10-q2_70-prune20",   "stats": "out/native/stats.pt", "tiers": [[0.10, "native"], [0.70, "q2"], [0.20, "prune"]]},
+ {"name": "n10-t90",             "stats": "out/native/stats.pt", "tiers": [[0.10, "native"], [0.90, "t"]]},
+ {"name": "n10-q2_50-t35-prune5", "stats": "out/native/stats.pt", "tiers": [[0.10, "native"], [0.50, "q2"], [0.35, "t"], [0.05, "prune"]]},
+ {"name": "n25-q2_35-prune40",   "stats": "out/native/stats.pt", "tiers": [[0.25, "native"], [0.35, "q2"], [0.40, "prune"]]}
+]

@@ -1,0 +1,128 @@
+[
+ {
+  "name": "prune40",
+  "stats": "stats-half.pt",
+  "tiers": [
+   [
+    0.6,
+    "native"
+   ],
+   [
+    0.4,
+    "prune"
+   ]
+  ]
+ },
+ {
+  "name": "prune50",
+  "stats": "stats-half.pt",
+  "tiers": [
+   [
+    0.5,
+    "native"
+   ],
+   [
+    0.5,
+    "prune"
+   ]
+  ]
+ },
+ {
+  "name": "prune60",
+  "stats": "stats-half.pt",
+  "tiers": [
+   [
+    0.4,
+    "native"
+   ],
+   [
+    0.6,
+    "prune"
+   ]
+  ]
+ },
+ {
+  "name": "prune70",
+  "stats": "stats-half.pt",
+  "tiers": [
+   [
+    0.3,
+    "native"
+   ],
+   [
+    0.7,
+    "prune"
+   ]
+  ]
+ },
+ {
+  "name": "prune40-q2",
+  "stats": "stats-half.pt",
+  "tiers": [
+   [
+    0.6,
+    "q2"
+   ],
+   [
+    0.4,
+    "prune"
+   ]
+  ]
+ },
+ {
+  "name": "prune50-q2",
+  "stats": "stats-half.pt",
+  "tiers": [
+   [
+    0.5,
+    "q2"
+   ],
+   [
+    0.5,
+    "prune"
+   ]
+  ]
+ },
+ {
+  "name": "prune60-q2",
+  "stats": "stats-half.pt",
+  "tiers": [
+   [
+    0.4,
+    "q2"
+   ],
+   [
+    0.6,
+    "prune"
+   ]
+  ]
+ },
+ {
+  "name": "prune50-q3",
+  "stats": "stats-half.pt",
+  "tiers": [
+   [
+    0.5,
+    "q3"
+   ],
+   [
+    0.5,
+    "prune"
+   ]
+  ]
+ },
+ {
+  "name": "prune50-t",
+  "stats": "stats-half.pt",
+  "tiers": [
+   [
+    0.5,
+    "t"
+   ],
+   [
+    0.5,
+    "prune"
+   ]
+  ]
+ }
+]

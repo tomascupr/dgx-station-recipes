@@ -1,0 +1,38 @@
+Kimi K3.1 Pro on a DGX Station (2-bit experts under stock vLLM)
+===============================================================
+
+This recipe is part of dgx-station-recipes (MIT; see ../LICENSE). Copyright 2026 Tomas Cupr.
+
+Its three-tier layout (hot experts on the GB300, a second tier computed on the RTX PRO 6000 by a sidecar, placement
+from measured route counts) and the recipe's shape (CLI, README, RESULTS, LIMITATIONS, NOTICE) follow Garner
+McCloud's ../deepseek-v4.1-flash by way of ../glm-5.3-flash-fp8. serve/hook/kchannel.py is glm-5.3-flash-fp8's
+peer/channel.py with Kimi's sizes.
+
+The model
+---------
+
+moonshotai/Kimi-K3.1-Pro, https://huggingface.co/moonshotai/Kimi-K3.1-Pro, revision
+d9e99b0792a5e93b78ea9bea62a68167e36ddd9e. "Kimi K3.1-Pro License", Copyright (c) 2026 Moonshot AI: an MIT-style
+licence with additional conditions for Model-as-a-Service businesses above 20 million US dollars of revenue in 12
+months (a separate agreement with Moonshot AI) and for products above 100 million monthly active users or 20 million
+US dollars of monthly revenue ("Kimi K3.1-Pro" must be displayed). Read the full text in the model repository
+(LICENSE) before any commercial use. This repository contains no weights. `kimi install` downloads the
+served files, a derivative of that release (routed experts re-rounded to 2 bits, the other weights unchanged),
+from huggingface.co/tomcupr/Kimi-K3.1-Pro-DGX-Station-2bit, which carries Moonshot AI's licence and copyright
+notice; `kimi prepare` derives the same files from the official release on your machine. serve/rank-native.json is
+a table of expert ids ordered by measured use, not weights.
+
+The draft model is Inferact/Kimi-K3.1-Pro-DSpark-preview, under its own licence in its repository.
+
+Code this recipe runs but does not include
+------------------------------------------
+
+vLLM (image vllm/vllm-openai:kimi-k31), Apache-2.0: the server, including the Kimi K3 model code the hook attaches
+to. The hook calls vLLM's functions; it copies none of its source. PyTorch, Triton, safetensors, transformers: their
+own licences. tools/kstream.py and study/ only: Moonshot AI's Kimi K3 reference modeling code (fetched by the user) and fla-core, MIT.
+
+Method
+------
+
+study/kgptq.py follows GPTQ (Frantar et al., 2022). The served experts do not use it: plain rounding scored the
+same end to end (RESULTS.md).

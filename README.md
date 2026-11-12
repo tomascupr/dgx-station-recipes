@@ -3,6 +3,10 @@
 Serving recipes for an NVIDIA **DGX Station GB300**, each one a tested, one-command way to run a model on it and
 get a private, OpenAI-compatible endpoint:
 
+- **[`kimi-k3.1-pro/`](kimi-k3.1-pro/), Kimi K3.1 Pro (2-bit experts): by Tomas Cupr.** A 2.78-trillion-parameter
+  model with a 1.45 TiB checkpoint, whole, at about 30 tokens/s: routed experts repacked to 2 bits and spread over
+  the RTX, the GB300 and Grace memory, under stock vLLM. Weights:
+  [tomcupr/Kimi-K3.1-Pro-DGX-Station-2bit](https://huggingface.co/tomcupr/Kimi-K3.1-Pro-DGX-Station-2bit).
 - **[`glm-5.3-flash-fp8/`](glm-5.3-flash-fp8/), GLM-5.3-Flash (native FP8): by Tomas Cupr, new in this
   repository.** It takes the design of the DeepSeek recipe below to a different model, with its own expert
   routing, sidecar and kernels.
@@ -11,7 +15,7 @@ get a private, OpenAI-compatible endpoint:
   starts with his two commits).
 
 Every recipe carries its own CLI, docs, measured results and licence notices, so you can copy a recipe's directory
-on its own. Both add one GPU, an **RTX PRO 6000 (96 GB)**: neither model fits the GB300's memory, so each MoE
+on its own. The GLM and DeepSeek recipes add one GPU, an **RTX PRO 6000 (96 GB)**: neither model fits the GB300's memory, so each MoE
 layer's least-used experts live on the RTX, which computes them in a sidecar process. Without it, the GB300 reads
 those experts from Grace memory on every step; with it, both models run **3-4x faster** on the same box.
 
@@ -61,6 +65,6 @@ Then read that recipe's `README.md`.
 
 ## Licence
 
-MIT (see `LICENSE`), copyright 2026 Garner McCloud; `glm-5.3-flash-fp8/` copyright 2026 Tomas Cupr, apart from the
+MIT (see `LICENSE`), copyright 2026 Garner McCloud; `glm-5.3-flash-fp8/` and `kimi-k3.1-pro/` copyright 2026 Tomas Cupr, apart from the
 files its `NOTICE` credits to others. Each recipe's `NOTICE` lists the third-party code and data it includes and
 their licences. `glm-5.3-flash-fp8/` follows the design of Garner's `deepseek-v4.1-flash/`.
