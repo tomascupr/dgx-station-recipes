@@ -4,8 +4,8 @@ Serving recipes for an NVIDIA **DGX Station GB300**, each one a tested, one-comm
 get a private, OpenAI-compatible endpoint:
 
 - **[`kimi-k3.1-pro/`](kimi-k3.1-pro/), Kimi K3.1 Pro (2-bit experts): by Tomas Cupr.** A 2.78-trillion-parameter
-  model with a 1.45 TiB checkpoint, whole, at about 30 tokens/s: routed experts repacked to 2 bits and spread over
-  the RTX, the GB300 and Grace memory, under stock vLLM. Weights:
+  model with a 1.45 TiB checkpoint, whole, at about 30 tokens/s on the Station plus an RTX PRO 6000: routed experts
+  repacked to 2 bits and spread over the RTX, the GB300 and Grace memory, under stock vLLM. Weights:
   [tomcupr/Kimi-K3.1-Pro-DGX-Station-2bit](https://huggingface.co/tomcupr/Kimi-K3.1-Pro-DGX-Station-2bit).
 - **[`glm-5.3-flash-fp8/`](glm-5.3-flash-fp8/), GLM-5.3-Flash (native FP8): by Tomas Cupr, new in this
   repository.** It takes the design of the DeepSeek recipe below to a different model, with its own expert

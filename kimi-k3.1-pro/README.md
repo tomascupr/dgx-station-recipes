@@ -1,8 +1,9 @@
-# Kimi K3.1 Pro on one DGX Station: 2-bit experts under stock vLLM
+# Kimi K3.1 Pro on a DGX Station + RTX PRO 6000: 2-bit experts under stock vLLM
 
 [moonshotai/Kimi-K3.1-Pro](https://huggingface.co/moonshotai/Kimi-K3.1-Pro) has 2.78 trillion parameters and a
-1,454 GiB checkpoint. A DGX Station has 251 GiB on the GB300, 96 GiB on an RTX PRO 6000 and 494 GiB of Grace memory.
-This recipe serves the whole model on that box behind an OpenAI-compatible endpoint:
+1,454 GiB checkpoint. A DGX Station has 251 GiB on the GB300 and 494 GiB of Grace memory; like the other recipes
+here, this one adds an RTX PRO 6000 (96 GiB) as a second GPU. It serves the whole model on that box behind an
+OpenAI-compatible endpoint (without the RTX: 24.9 tokens/s and more experts dropped, see LIMITATIONS.md):
 
 | | |
 |---|---|
