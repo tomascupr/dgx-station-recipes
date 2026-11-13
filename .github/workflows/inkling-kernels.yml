@@ -14,7 +14,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: unit tests and build.sh --dry-run
-        run: python3 -m unittest discover -s inkling-2-small/verify -q
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet numpy
+          .venv/bin/python -m unittest discover -s inkling-2-small/verify -q
       - name: nvcc if this runner has it
         run: |
           if command -v nvcc >/dev/null 2>&1 || { [ -n "${CUDA_HOME:-}" ] && [ -x "${CUDA_HOME}/bin/nvcc" ]; }; then
