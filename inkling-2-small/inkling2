@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# inkling2: Inkling 2 Small on a DGX Station. up/down never stop dsv41.
+set -euo pipefail
+ROOT=$(cd "$(dirname "$0")" && pwd)
+: "${INKLING2_HOME:=$HOME/.inkling2}"
+# shellcheck disable=SC1091
+. "$ROOT/config/recipe.env"
+CONFIG=${INKLING2_CONFIG:-$INKLING2_HOME/config.env}
+if [ -f "$CONFIG" ]; then . "$CONFIG"; fi
+: "${INKLING2_IMAGE:=$INKLING2_SUPPORTED_IMAGE}"
+: "${INKLING2_PORT:=$INKLING2_DEFAULT_PORT}"
+: "${INKLING2_HOST:=$INKLING2_DEFAULT_HOST}"
+: "${INKLING2_SEGMENT:=$INKLING2_DEFAULT_SEGMENT}"
+: "${INKLING2_GB300_EXPERT_GIB:=$INKLING2_DEFAULT_GB300_EXPERT_GIB}"
+: "${INKLING2_RTX_EXPERT_GIB:=$INKLING2_DEFAULT_RTX_EXPERT_GIB}"
+: "${INKLING2_MODEL_DIR:=$INKLING2_HOME/models/Inkling-2-Small}"
+: "${INKLING2_PLACEMENT:=$INKLING2_HOME/placement.json}"
+export INKLING2_HOME INKLING2_IMAGE INKLING2_MODEL_REPO INKLING2_MODEL_REV
+export INKLING2_MODEL_DIR INKLING2_PORT INKLING2_HOST INKLING2_SEGMENT INKLING2_PLACEMENT
+export INKLING2_GB300_EXPERT_GIB INKLING2_RTX_EXPERT_GIB
+
+log() { printf '[inkling2] %s\n' "$*"; }
+die() { printf '[inkling2] ERROR: %s\n' "$*" >&2; exit 1; }
+
+usage() {
+  cat <<EOF
+inkling2: Inkling 2 Small, native NVFP4 + MXFP8, on a DGX Station
+
+  inkling2 plan [--profile FILE] [--from-hf] [--out FILE]
+  inkling2 test
+  inkling2 up
+  inkling2 down
+  inkling2 status
+
+up starts day-0 vLLM on the GB300 only. It does not stop dsv41. If the ds41
+or ds41-sidecar container exists, up refuses. Removing dsv41 needs the
+owner's approval, then that recipe's own ./ds41 down.
+
+The RTX sidecar and the grouped GEMMs are unvalidated. Do not treat
+./inkling2 up as a finished peer server. See README.md and docs/SMOKE.md.
+EOF
+}
+
+cmd_plan() {
+  local out="$INKLING2_PLACEMENT" from_hf=1
+  local -a pass=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --out) out=$2; shift ;;
+      --index) from_hf=0; pass+=(--index "$2"); shift ;;
+      --headers-dir) from_hf=0; pass+=(--headers-dir "$2"); shift ;;
+      --profile|--gb300-expert-gib|--rtx-expert-gib|--cache|--repo|--revision)
+        pass+=("$1" "$2"); shift ;;
+      --from-hf) from_hf=1 ;;
+      *) die "unknown plan option: $1" ;;
+    esac
+    shift
+  done
+  mkdir -p "$(dirname "$out")"
+  local -a args=(--out "$out")
+  if [ "$from_hf" = 1 ]; then args+=(--from-hf); fi
+  # Defaults first, so an explicit flag in pass[] overrides them.
+  args+=(--gb300-expert-gib "$INKLING2_GB300_EXPERT_GIB" --rtx-expert-gib "$INKLING2_RTX_EXPERT_GIB")
+  if [ "${#pass[@]}" -gt 0 ]; then args+=("${pass[@]}"); fi
+  python3 "$ROOT/placement/plan_experts.py" "${args[@]}"
+}
+
+cmd_test() {
+  python3 -m unittest discover -s "$ROOT/verify" -v
+}
+
+cmd_up() { exec "$ROOT/serve/serve.sh" up; }
+cmd_down() { exec "$ROOT/serve/serve.sh" down; }
+cmd_status() { exec "$ROOT/serve/serve.sh" status; }
+
+case "${1:-}" in
+  plan) shift; cmd_plan "$@" ;;
+  test) shift; cmd_test "$@" ;;
+  up) shift; cmd_up "$@" ;;
+  down) shift; cmd_down "$@" ;;
+  status) shift; cmd_status "$@" ;;
+  help|--help|-h) usage ;;
+  "") usage; exit 2 ;;
+  *) usage; exit 2 ;;
+esac
