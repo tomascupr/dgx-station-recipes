@@ -1,7 +1,6 @@
-// UNVALIDATED. Not compiled and not run on sm_103 or sm_120.
-// Correctness kernel only: one thread per token, fp64 accumulation, the same
-// formulas as kernels/reference/quant.py. It is not a serving GEMM. Do not
-// quote its speed. The sidecar does not call it.
+// FP64 reference GEMM. The serving path is inkling_grouped.cuh (CUTLASS
+// block-scaled grouped GEMM). This kernel exists to diff against. It is one
+// thread per token and has no tensor cores. Do not quote its speed.
 #pragma once
 #include <cmath>
 #include <cstdint>
@@ -31,14 +30,24 @@ __device__ __forceinline__ double nvfp4(const uint8_t* packed, const uint8_t* sc
   return e2m1(nib) * e4m3(scale[k >> 4]) * (amax / denom);
 }
 
-__device__ __forceinline__ double mxfp8(const uint8_t* values, const uint8_t* scale, int k) {
-  return e4m3(values[k]) * exp2(static_cast<double>(static_cast<int>(scale[k >> 5]) - 127));
+__device__ __forceinline__ double ue8m0(unsigned byte) {
+  // OCP E8M0: 0xFF is NaN, not 2^(255-127).
+  if (byte == 0xFFu) return nan("");
+  return exp2(static_cast<double>(static_cast<int>(byte) - 127));
 }
 
+__device__ __forceinline__ double mxfp8(const uint8_t* values, const uint8_t* scale, int k) {
+  return e4m3(values[k]) * ue8m0(scale[k >> 5]);
+}
+
+// Sigmoid sees the unclamped gate. vLLM d664cd1e
+// vllm/models/inkling2/ops/activation.py:75 computes _sigmoid_approx(gate)
+// and only then line 76 replaces gate with _softcap(gate, GATE_CAP). The
+// product on line 78 is softcap(gate) * sigmoid(unclamped gate) * softcap(up) * gamma.
 __device__ __forceinline__ double swiglu(double gate, double up, double route) {
+  double sig = 1.0 / (1.0 + exp(-gate));
   double gate_c = 4.0 * tanh(gate / 4.0);
   double up_c = 25.0 * tanh(up / 25.0);
-  double sig = 1.0 / (1.0 + exp(-gate));
   return gate_c * sig * up_c * route;
 }
 

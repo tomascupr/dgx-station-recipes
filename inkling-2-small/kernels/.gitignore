@@ -1,2 +1,3 @@
 *.so
 *.o
+third_party/

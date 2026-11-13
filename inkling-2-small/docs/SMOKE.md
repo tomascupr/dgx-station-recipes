@@ -18,13 +18,16 @@ weights. Confirm the checkpoint at `/data/models/Inkling-2-Small` is revision
 `8361e7a31ae7e9966a49a91d3994fde618936c2b` and the directory size is about
 393,509,649,692 bytes (the Hub `usedStorage` figure in the plan).
 
-Compile only, with no process holding a GPU and `CUDA_VISIBLE_DEVICES` unset
-(the build script unsets it). If the driver looks busy or a command tries to
-create a CUDA context, stop.
+Compile only. The script does not launch a kernel and does not change
+`CUDA_VISIBLE_DEVICES`. nvcc is not on PATH on the Station:
 
 ```bash
-./kernels/build.sh
+CUDA_HOME=/usr/local/cuda-13.2 ./kernels/build.sh
 ```
+
+That is `-arch=sm_103a` and `-arch=sm_120a`, with CUTLASS `b2f249acd203`
+(cloned into `kernels/third_party/cutlass` if `CUTLASS_ROOT` is unset).
+`./kernels/build.sh --dry-run` prints the commands and does not download.
 
 No `.so` is produced on an x86 machine without `nvcc`. That is expected. The
 objects are `peer/prebuilt/peer_inkling_gb300_sm103.so` and
@@ -55,8 +58,8 @@ can take hours; watch `docker logs -f inkling2`. Success for this step is one
 health check and one short generate:
 
 ```bash
-curl -sf http://127.0.0.1:30006/health
-curl -s http://127.0.0.1:30006/v1/chat/completions -H 'Content-Type: application/json' \
+curl -sf http://127.0.0.1:${INKLING2_PORT:-30008}/health
+curl -s http://127.0.0.1:${INKLING2_PORT:-30008}/v1/chat/completions -H 'Content-Type: application/json' \
   -d '{"model":"inkling-2-small","messages":[{"role":"user","content":"Say hi."}],"max_tokens":16}'
 ```
 
@@ -82,7 +85,7 @@ docker run --rm --gpus device=<GB300-uuid> --network host --ipc host \
   vllm/vllm-openai:inkling-2-small \
   --model /model --served-model-name inkling-2-small \
   --tensor-parallel-size 1 --enforce-eager \
-  --host 127.0.0.1 --port 30006
+  --host 127.0.0.1 --port "${INKLING2_PORT:-30008}"
 ```
 
 Send a calibration set (a few thousand tokens of the prompts you care about),

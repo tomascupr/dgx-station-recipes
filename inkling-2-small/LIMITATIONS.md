@@ -1,10 +1,11 @@
 # Limitations
 
-1. **No Station run.** Placement, dequant, routing and the peer record were
-   checked on a CPU. The CUDA files are marked UNVALIDATED and were not
-   compiled. `./inkling2 up` starts day-0 vLLM only; the hook that would split
-   experts raises until `INKLING2_REFERENCE=1`, which is a tiny-bank mode, not
-   a way to serve the checkpoint.
+1. **No GPU run of the serving GEMMs.** Placement, dequant, routing and the
+   peer record were checked on a CPU. The CUTLASS grouped GEMMs
+   (`inkling_grouped.cuh`) have not been executed; the FP64 kernels are the
+   reference to diff against. `./inkling2 up` starts day-0 vLLM only. The hook
+   raises until `INKLING2_REFERENCE=1`, which is a tiny-bank mode, not a way
+   to serve the checkpoint.
 
 2. **dsv41 is not touched.** `up` refuses while a `ds41` or `ds41-sidecar`
    container exists. It never removes them. Host RAM while dsv41 is up is not

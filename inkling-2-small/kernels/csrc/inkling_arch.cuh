@@ -1,0 +1,93 @@
+// GEMM types for one target. The .cu sets INKLING_ARCH to 103 or 120
+// before including this. CUTLASS b2f249acd203.
+#pragma once
+
+#include "inkling_grouped.cuh"
+
+namespace inkling {
+namespace arch {
+
+template <class Arch, class ElementA, class ElementB, class Tile, class Cluster, class MainSchedule,
+          class EpiSchedule, int AlignA, int AlignC>
+struct MakeGemm {
+  using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
+      Arch, cutlass::arch::OpClassBlockScaledTensorOp, Tile, Cluster,
+      cutlass::epilogue::collective::EpilogueTileAuto, float, float, cutlass::bfloat16_t,
+      cutlass::layout::RowMajor*, AlignC, cutlass::bfloat16_t, cutlass::layout::RowMajor*, AlignC,
+      EpiSchedule>::CollectiveOp;
+  using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder<
+      Arch, cutlass::arch::OpClassBlockScaledTensorOp, ElementA, cutlass::layout::RowMajor*, AlignA,
+      ElementB, cutlass::layout::ColumnMajor*, AlignA, float, Tile, Cluster,
+      cutlass::gemm::collective::StageCountAutoCarveout<
+          static_cast<int>(sizeof(typename CollectiveEpilogue::SharedStorage))>,
+      MainSchedule>::CollectiveOp;
+  using Gemm = cutlass::gemm::device::GemmUniversalAdapter<cutlass::gemm::kernel::GemmUniversal<
+      cutlass::gemm::GroupProblemShape<cute::Shape<int, int, int>>, CollectiveMainloop,
+      CollectiveEpilogue>>;
+};
+
+#if INKLING_ARCH == 103
+
+// N = 64: one tile holds every token of a decode expert (1..64). K tile 768
+// divides 4608 and 2304. Builder rejects anything but e2m1 on Sm103.
+using Nvfp4 = MakeGemm<
+    cutlass::arch::Sm103, cute::tuple<cutlass::float_e2m1_t, cutlass::float_ue4m3_t>,
+    cute::tuple<cutlass::float_e2m1_t, cutlass::float_ue4m3_t>,
+    cute::Shape<cute::_128, cute::_64, cute::Int<768>>, cute::Shape<cute::_1, cute::_1, cute::_1>,
+    cutlass::gemm::KernelPtrArrayTmaWarpSpecialized1SmBlockScaledMxNvf4UltraVs16Sm103,
+    cutlass::epilogue::PtrArrayNoSmemWarpSpecialized1Sm, 32, 8>;
+using Nvfp4Gemm = Nvfp4::Gemm;
+using Nvfp4A = cutlass::float_e2m1_t;
+using Nvfp4Scale = cutlass::float_ue4m3_t;
+inline constexpr int kNvfp4Block = 16;
+inline constexpr int kNvfp4TileK = 768;
+
+// Sm103's builder is FP4-only (sm103_make_blockscaled_1sm_tiled_mma). MXFP8
+// uses the SM100 grouped MXF8 schedule; cute enables tcgen05 MXF8 for sm_103a.
+using Mxfp8 = MakeGemm<
+    cutlass::arch::Sm100, cutlass::mx_float8_t<cutlass::float_e4m3_t>,
+    cutlass::mx_float8_t<cutlass::float_e4m3_t>, cute::Shape<cute::_128, cute::_128, cute::_128>,
+    cute::Shape<cute::_1, cute::_1, cute::_1>,
+    cutlass::gemm::KernelPtrArrayTmaWarpSpecialized1SmMxf8f6f4Sm100,
+    cutlass::epilogue::PtrArrayTmaWarpSpecialized1Sm, 16, 8>;
+using Mxfp8Gemm = Mxfp8::Gemm;
+using Mxfp8A = cutlass::mx_float8_t<cutlass::float_e4m3_t>;
+using Mxfp8Scale = cutlass::float_ue8m0_t;
+inline constexpr int kMxfp8Block = 32;
+inline constexpr int kMxfp8TileK = 128;
+
+#elif INKLING_ARCH == 120
+
+// Pingpong block-scaled grouped schedule. N = 64 is the decode tile
+// (builder allows N >= 8). Same schedule for both formats; the element
+// type selects the scale vector (16 for NVFP4, 32 for MXFP8).
+using Nvfp4 = MakeGemm<
+    cutlass::arch::Sm120, cutlass::nv_float4_t<cutlass::float_e2m1_t>,
+    cutlass::nv_float4_t<cutlass::float_e2m1_t>, cute::Shape<cute::_128, cute::_64, cute::_128>,
+    cute::Shape<cute::_1, cute::_1, cute::_1>,
+    cutlass::gemm::KernelPtrArrayTmaWarpSpecializedPingpongBlockScaledSm120,
+    cutlass::epilogue::collective::EpilogueScheduleAuto, 32, 8>;
+using Nvfp4Gemm = Nvfp4::Gemm;
+using Nvfp4A = cutlass::nv_float4_t<cutlass::float_e2m1_t>;
+using Nvfp4Scale = cutlass::float_ue4m3_t;
+inline constexpr int kNvfp4Block = 16;
+inline constexpr int kNvfp4TileK = 128;
+
+using Mxfp8 = MakeGemm<
+    cutlass::arch::Sm120, cutlass::mx_float8_t<cutlass::float_e4m3_t>,
+    cutlass::mx_float8_t<cutlass::float_e4m3_t>, cute::Shape<cute::_128, cute::_64, cute::_128>,
+    cute::Shape<cute::_1, cute::_1, cute::_1>,
+    cutlass::gemm::KernelPtrArrayTmaWarpSpecializedPingpongBlockScaledSm120,
+    cutlass::epilogue::collective::EpilogueScheduleAuto, 16, 8>;
+using Mxfp8Gemm = Mxfp8::Gemm;
+using Mxfp8A = cutlass::mx_float8_t<cutlass::float_e4m3_t>;
+using Mxfp8Scale = cutlass::float_ue8m0_t;
+inline constexpr int kMxfp8Block = 32;
+inline constexpr int kMxfp8TileK = 128;
+
+#else
+#error "set INKLING_ARCH to 103 or 120"
+#endif
+
+}  // namespace arch
+}  // namespace inkling

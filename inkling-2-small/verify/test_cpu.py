@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import struct
 import subprocess
 import sys
@@ -119,6 +120,8 @@ class QuantTest(unittest.TestCase):
         scales = np.array([[127 + 1]], dtype=np.uint8)  # 2^1
         got = quant.dequant_mxfp8(values, scales)
         self.assertTrue(np.allclose(got, 2.0))
+        nan_scale = quant.dequant_mxfp8(values, np.array([[0xFF]], dtype=np.uint8))
+        self.assertTrue(np.isnan(nan_scale).all())
 
     def test_router_tie_breaks_low_and_weights_sum_to_scale(self):
         logits = np.zeros((1, 4))
@@ -310,11 +313,23 @@ class ScriptTest(unittest.TestCase):
         dry = subprocess.run(["bash", str(ROOT / "kernels" / "build.sh"), "--dry-run"],
                              check=False, capture_output=True, text=True)
         self.assertEqual(dry.returncode, 0, dry.stderr)
-        self.assertIn("sm_103", dry.stdout)
-        self.assertIn("sm_120", dry.stdout)
-        build = "\n".join(
-            line.split("#", 1)[0] for line in (ROOT / "kernels" / "build.sh").read_text().splitlines())
-        self.assertNotIn("nvidia-smi", build)
+        self.assertIn("sm_103a", dry.stdout)
+        self.assertIn("sm_120a", dry.stdout)
+        self.assertIn("-fPIC", dry.stdout)
+        build = (ROOT / "kernels" / "build.sh").read_text()
+        code = "\n".join(line.split("#", 1)[0] for line in build.splitlines())
+        self.assertNotIn("unset CUDA_VISIBLE_DEVICES", code)
+        self.assertIn("CUDA_HOME", build)
+        self.assertNotIn("nvidia-smi", code)
+        self.assertIn("30008", (ROOT / "config" / "recipe.env").read_text())
+        nvcc = os.environ.get("NVCC")
+        cuda = os.environ.get("CUDA_HOME")
+        if not nvcc and cuda and os.path.isfile(os.path.join(cuda, "bin", "nvcc")):
+            nvcc = os.path.join(cuda, "bin", "nvcc")
+        if nvcc and os.path.isfile(nvcc) or (nvcc and shutil.which(nvcc)):
+            compiled = subprocess.run(["bash", str(ROOT / "kernels" / "build.sh")],
+                                      check=False, capture_output=True, text=True)
+            self.assertEqual(compiled.returncode, 0, compiled.stderr)
 
 
 if __name__ == "__main__":

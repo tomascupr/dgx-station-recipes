@@ -34,8 +34,11 @@ is not copied here as a forecast.
 
 ## What is not validated
 
-* `kernels/csrc/*.cu` and `kernels/build.sh`. No `nvcc` in the environment that
-  wrote them, so there is no `.so`. The sidecar does not call those symbols.
+* The CUTLASS serving GEMMs (`kernels/csrc/inkling_grouped.cuh`, built
+  `-arch=sm_103a` and `-arch=sm_120a`). They have not been executed. The FP64
+  kernels remain the numeric reference. `./kernels/build.sh` needs
+  `CUDA_HOME` on the Station (`/usr/local/cuda-13.2`) and CUTLASS
+  `b2f249acd203`.
 * The vLLM hook (`peer/hook.py`, `routing/collect.py`) against image
   `vllm/vllm-openai:inkling-2-small` or PR
   [vllm#67325](https://github.com/vllm-project/vllm/pull/67325) head `d664cd1e`.
@@ -53,9 +56,10 @@ is not copied here as a forecast.
 ./inkling2 down                    # removes the inkling2 container only
 ```
 
-`up` is day-0 vLLM on the GB300, with no peer hook and no RTX sidecar. It does
-not stop dsv41. If those containers exist, it exits. Taking dsv41 down needs
-the owner's approval, and then that recipe's own `./ds41 down`.
+`up` listens on port 30008 unless `INKLING2_PORT` is set. It is day-0 vLLM
+on the GB300, with no peer hook and no RTX sidecar. It does not stop dsv41.
+If those containers exist, it exits. Taking dsv41 down needs the owner's
+approval, and then that recipe's own `./ds41 down`.
 
 The first GPU window is `docs/SMOKE.md` (the plan's 4–6 hour estimate for
 stop, profile, one generate, restore). `docs/ARCHITECTURE.md` records where

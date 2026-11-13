@@ -121,9 +121,11 @@ def dequant_nvfp4(packed: np.ndarray, scales: np.ndarray, amax, denominator: flo
 
 
 def dequant_mxfp8(values: np.ndarray, scales: np.ndarray) -> np.ndarray:
-    """``e4m3 * 2^(ue8m0 - 127)``, scale shared by 32 K elements."""
+    """``e4m3 * 2^(ue8m0 - 127)``, scale shared by 32 K elements. Byte 0xFF is NaN."""
     vals = e4m3fn_to_float(values)
-    scale = np.exp2(np.asarray(scales, dtype=np.int16) - 127)
+    raw = np.asarray(scales, dtype=np.uint8)
+    scale = np.exp2(raw.astype(np.float64) - 127.0)
+    scale = np.where(raw == 0xFF, np.nan, scale)
     return vals * np.repeat(scale, MXFP8_BLOCK, axis=-1)
 
 

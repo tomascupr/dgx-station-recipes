@@ -1,0 +1,24 @@
+name: inkling-kernels
+
+on:
+  pull_request:
+    paths:
+      - "inkling-2-small/**"
+      - ".github/workflows/inkling-kernels.yml"
+  push:
+    branches: [inkling-2-small]
+
+jobs:
+  cpu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: unit tests and build.sh --dry-run
+        run: python3 -m unittest discover -s inkling-2-small/verify -q
+      - name: nvcc if this runner has it
+        run: |
+          if command -v nvcc >/dev/null 2>&1 || { [ -n "${CUDA_HOME:-}" ] && [ -x "${CUDA_HOME}/bin/nvcc" ]; }; then
+            inkling-2-small/kernels/build.sh
+          else
+            echo "nvcc is not installed; compile step skipped"
+          fi
