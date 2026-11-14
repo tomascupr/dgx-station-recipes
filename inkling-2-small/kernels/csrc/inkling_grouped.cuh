@@ -101,6 +101,8 @@ int launch_grouped(const Launch& in) {
     stride_b[g] = cutlass::make_cute_packed_stride(StrideB{}, make_shape(N, in.K, 1));
     stride_c[g] = cutlass::make_cute_packed_stride(StrideC{}, make_shape(in.M, N, 1));
     stride_d[g] = stride_c[g];
+    // Rank-4 problem shape matches InternalLayoutSFA/B, which include the
+    // batch mode. tile_atom_to_shape on a rank-3 shape drops that mode.
     layout_sfa[g] = Blk::tile_atom_to_shape_SFA(make_shape(in.M, N, in.K, 1));
     layout_sfb[g] = Blk::tile_atom_to_shape_SFB(make_shape(in.M, N, in.K, 1));
     ptr_a[g] = static_cast<const AStore*>(in.A[g]);
@@ -137,7 +139,6 @@ int launch_grouped(const Launch& in) {
   step(ptr_sfa.data(), sizeof(void*) * in.groups, &d_psfa);
   step(ptr_sfb.data(), sizeof(void*) * in.groups, &d_psfb);
   step(ptr_d.data(), sizeof(void*) * in.groups, &d_pd);
-  step(alpha.data(), sizeof(float) * in.groups, &d_alpha);
   if (rc) return 3;
 
   cutlass::KernelHardwareInfo hw{};
@@ -146,12 +147,16 @@ int launch_grouped(const Launch& in) {
 
   typename Gemm::Arguments arguments{};
   auto& fusion = arguments.epilogue.thread;
-  fusion.alpha = 0.f;
+  // One alpha for every group. Per-expert NVFP4 scales are applied in the
+  // SiTU and the scatter, not through alpha_ptr_array (that field is
+  // const float* const*, one pointer per group).
+  fusion.alpha = 1.f;
   fusion.beta = 0.f;
   fusion.alpha_ptr = nullptr;
-  fusion.alpha_ptr_array = static_cast<const float*>(d_alpha);
+  fusion.alpha_ptr_array = nullptr;
   fusion.beta_ptr = nullptr;
   fusion.beta_ptr_array = nullptr;
+  (void)alpha;
 
   typename Gemm::GemmKernel::TileSchedulerArguments scheduler{};
   arguments = typename Gemm::Arguments{
@@ -161,7 +166,7 @@ int launch_grouped(const Launch& in) {
        static_cast<const BStore**>(d_pb), static_cast<StrideB*>(d_sb),
        static_cast<const SFAStore**>(d_psfa), static_cast<LayoutSFA*>(d_lsfa),
        static_cast<const SFAStore**>(d_psfb), static_cast<LayoutSFB*>(d_lsfb)},
-      {fusion, static_cast<cutlass::bfloat16_t**>(d_pd), static_cast<StrideC*>(d_sc),
+      {fusion, static_cast<const cutlass::bfloat16_t**>(d_pd), static_cast<StrideC*>(d_sc),
        static_cast<cutlass::bfloat16_t**>(d_pd), static_cast<StrideD*>(d_sd)},
       hw, scheduler};
 
@@ -194,7 +199,8 @@ __global__ void pack_sf_kernel(const uint8_t* __restrict__ src, uint8_t* __restr
                                Layout layout, int rows, int cols) {
   const int idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= rows * cols) return;
-  dst[layout(cute::make_coord(idx / cols, idx % cols))] = src[idx];
+  // Layout is rank 3: (row, k-block, batch). Batch is 1.
+  dst[layout(cute::make_coord(idx / cols, idx % cols, 0))] = src[idx];
 }
 
 template <class Gemm>

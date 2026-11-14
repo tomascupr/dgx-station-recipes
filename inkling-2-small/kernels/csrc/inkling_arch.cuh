@@ -28,12 +28,19 @@ struct MakeGemm {
 
 #if INKLING_ARCH == 103
 
-// N = 64: one tile holds every token of a decode expert (1..64). K tile 768
-// divides 4608 and 2304. Builder rejects anything but e2m1 on Sm103.
+// CTA N must be 128, 192, or 256
+// (sm103_blockscaled_mma_array_warpspecialized.hpp:140). The SM103 builder
+// also only allows M of 128 or 256 (sm103_blockscaled_umma_builder.inl), so
+// putting tokens on M (TRT-LLM's swap_ab, moe_gemm_template_dispatch.h:668)
+// is the same 128-wide predicate, not a smaller tile. Tile N = 128 is the
+// smallest legal CTA N: a decode expert of 1..128 tokens is one predicated
+// tile. K = 768 is required by that builder and divides 4608 and 2304.
+// vLLM's inkling2 grouped_gemm.py masks a 64-row Triton tile; that kernel is
+// BF16 and is not this MMA.
 using Nvfp4 = MakeGemm<
     cutlass::arch::Sm103, cute::tuple<cutlass::float_e2m1_t, cutlass::float_ue4m3_t>,
     cute::tuple<cutlass::float_e2m1_t, cutlass::float_ue4m3_t>,
-    cute::Shape<cute::_128, cute::_64, cute::Int<768>>, cute::Shape<cute::_1, cute::_1, cute::_1>,
+    cute::Shape<cute::_128, cute::_128, cute::Int<768>>, cute::Shape<cute::_1, cute::_1, cute::_1>,
     cutlass::gemm::KernelPtrArrayTmaWarpSpecialized1SmBlockScaledMxNvf4UltraVs16Sm103,
     cutlass::epilogue::PtrArrayNoSmemWarpSpecialized1Sm, 32, 8>;
 using Nvfp4Gemm = Nvfp4::Gemm;
@@ -58,14 +65,14 @@ inline constexpr int kMxfp8TileK = 128;
 
 #elif INKLING_ARCH == 120
 
-// Pingpong block-scaled grouped schedule. N = 64 is the decode tile
-// (builder allows N >= 8). Same schedule for both formats; the element
-// type selects the scale vector (16 for NVFP4, 32 for MXFP8).
+// 79d's grouped NVFP4 types (nv_float4_t, 128x128x128, 1x1x1,
+// KernelScheduleAuto) and 79a's bf16 epilogue. The templated
+// KernelPtrArrayTmaWarpSpecializedPingpongBlockScaledSm120
+// (dispatch_policy.hpp:640) is not the schedule 79d instantiates.
 using Nvfp4 = MakeGemm<
     cutlass::arch::Sm120, cutlass::nv_float4_t<cutlass::float_e2m1_t>,
-    cutlass::nv_float4_t<cutlass::float_e2m1_t>, cute::Shape<cute::_128, cute::_64, cute::_128>,
-    cute::Shape<cute::_1, cute::_1, cute::_1>,
-    cutlass::gemm::KernelPtrArrayTmaWarpSpecializedPingpongBlockScaledSm120,
+    cutlass::nv_float4_t<cutlass::float_e2m1_t>, cute::Shape<cute::_128, cute::_128, cute::_128>,
+    cute::Shape<cute::_1, cute::_1, cute::_1>, cutlass::gemm::collective::KernelScheduleAuto,
     cutlass::epilogue::collective::EpilogueScheduleAuto, 32, 8>;
 using Nvfp4Gemm = Nvfp4::Gemm;
 using Nvfp4A = cutlass::nv_float4_t<cutlass::float_e2m1_t>;
@@ -73,11 +80,12 @@ using Nvfp4Scale = cutlass::float_ue4m3_t;
 inline constexpr int kNvfp4Block = 16;
 inline constexpr int kNvfp4TileK = 128;
 
+// 79c's tile and KernelScheduleAuto, mx_float8 on both sides (79c mixes
+// in MXFP6), 79a's bf16 epilogue. Alignment 16 is 79c's MXFP8 alignment.
 using Mxfp8 = MakeGemm<
     cutlass::arch::Sm120, cutlass::mx_float8_t<cutlass::float_e4m3_t>,
-    cutlass::mx_float8_t<cutlass::float_e4m3_t>, cute::Shape<cute::_128, cute::_64, cute::_128>,
-    cute::Shape<cute::_1, cute::_1, cute::_1>,
-    cutlass::gemm::KernelPtrArrayTmaWarpSpecializedPingpongBlockScaledSm120,
+    cutlass::mx_float8_t<cutlass::float_e4m3_t>, cute::Shape<cute::_128, cute::_128, cute::_128>,
+    cute::Shape<cute::_1, cute::_1, cute::_1>, cutlass::gemm::collective::KernelScheduleAuto,
     cutlass::epilogue::collective::EpilogueScheduleAuto, 16, 8>;
 using Mxfp8Gemm = Mxfp8::Gemm;
 using Mxfp8A = cutlass::mx_float8_t<cutlass::float_e4m3_t>;

@@ -25,7 +25,9 @@ Compile only. The script does not launch a kernel and does not change
 CUDA_HOME=/usr/local/cuda-13.2 ./kernels/build.sh
 ```
 
-That is `-arch=sm_103a` and `-arch=sm_120a`, with CUTLASS `b2f249acd203`
+That is `compute_103a/sm_103a` and `compute_120a/sm_120a` (not a plain
+`compute_103` PTX, which rejects the block-scaled instructions), with
+CUTLASS `b2f249acd20392beeb16f5e5a31f4f1a4e38b3bd`
 (cloned into `kernels/third_party/cutlass` if `CUTLASS_ROOT` is unset).
 `./kernels/build.sh --dry-run` prints the commands and does not download.
 

@@ -7,13 +7,13 @@
 # left alone. CUDA_HOME, if set, supplies nvcc (the Station keeps it at
 # /usr/local/cuda-13.2/bin, which is not on PATH).
 #
-# CUTLASS b2f249acd203 is required for a real compile. Set CUTLASS_ROOT, or
+# CUTLASS b2f249acd20392beeb16f5e5a31f4f1a4e38b3bd is required. Set CUTLASS_ROOT, or
 # the script clones that commit into kernels/third_party/cutlass. --dry-run
 # only prints the nvcc lines and does not download.
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 OUT=${INKLING2_KERNEL_OUT:-$HERE/../peer/prebuilt}
-PIN=b2f249acd203
+PIN=b2f249acd20392beeb16f5e5a31f4f1a4e38b3bd
 DRY=0
 if [ "${1:-}" = --dry-run ]; then DRY=1; fi
 
@@ -44,12 +44,19 @@ fi
 mkdir -p "$OUT"
 compile() {
   local src=$1 arch=$2 so=$3
+  # -arch=sm_103a also emits forward-compat PTX for compute_103, and ptxas
+  # rejects tcgen05 block-scale there. Bind the virtual arch to compute_${arch}.
+  local virt=compute_${arch#sm_}
   echo "$NVCC" -shared -O3 -std=c++17 -Xcompiler -fPIC --expt-relaxed-constexpr \
-    -arch="$arch" -I"$HERE/csrc" -I"$CUTLASS_ROOT/include" -I"$CUTLASS_ROOT/tools/util/include" \
+    -diag-suppress 20012 \
+    -gencode "arch=${virt},code=${arch}" \
+    -I"$HERE/csrc" -I"$CUTLASS_ROOT/include" -I"$CUTLASS_ROOT/tools/util/include" \
     "$src" -o "$so"
   if [ "$DRY" = 1 ]; then return 0; fi
   "$NVCC" -shared -O3 -std=c++17 -Xcompiler -fPIC --expt-relaxed-constexpr \
-    -arch="$arch" -I"$HERE/csrc" -I"$CUTLASS_ROOT/include" -I"$CUTLASS_ROOT/tools/util/include" \
+    -diag-suppress 20012 \
+    -gencode "arch=${virt},code=${arch}" \
+    -I"$HERE/csrc" -I"$CUTLASS_ROOT/include" -I"$CUTLASS_ROOT/tools/util/include" \
     "$src" -o "$so"
 }
 if [ "$DRY" = 0 ] && ! command -v "$NVCC" >/dev/null 2>&1; then
