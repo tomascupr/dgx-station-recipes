@@ -97,7 +97,16 @@ def main() -> None:
     if so_path and os.path.exists(so_path) and not allow:
         print(f"UNVALIDATED kernel present at {so_path}; the sidecar keeps the numpy reference", flush=True)
     if use_gpu:
+        from gpus import find
+        chosen = find("rtx")
+        # Before the runtime initializes. Ordinal 0 on this host is only the
+        # RTX when this mask is the RTX UUID.
+        os.environ["CUDA_VISIBLE_DEVICES"] = chosen["uuid"]
         import torch
+        visible = torch.cuda.get_device_name(0)
+        if "RTX PRO 6000" not in visible:
+            raise SystemExit(f"sidecar is on {visible}, not {chosen['name']} {chosen['uuid']}")
+        print(f"sidecar GPU {visible} {chosen['uuid']}", flush=True)
         from bank import load_members
         from so import open_so
         peer = open_so(so_path)

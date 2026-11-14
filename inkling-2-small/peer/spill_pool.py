@@ -67,13 +67,19 @@ def host_path(device: int = 0) -> str:
 
 
 class SpillPool:
-    def __init__(self, bank_of, pool_bytes: int, device: int = 0):
-        """``bank_of(layer)`` returns the host bank for that layer's spill ids."""
+    def __init__(self, bank_of, pool_bytes: int, device: int | None = None):
+        """``bank_of(layer)`` returns the host bank for that layer's spill ids.
+
+        ``device`` left unset keeps the CUDA device the caller already selected.
+        Ordinal 0 is the RTX on this Station, so this does not default to it.
+        """
         import cudart
         self.cudart = cudart
         self.bank_of = bank_of
-        self.device = device
-        self.mode = host_path(device)
+        if device is not None:
+            cudart.set_device(device)
+        self.device = cudart.get_device()
+        self.mode = host_path(self.device)
         self.predicted: dict[int, list[int]] = {}
         self._host: dict[tuple[int, int], dict] = {}
         # Slot size is one expert. The first non-empty bank fixes it.
@@ -83,7 +89,6 @@ class SpillPool:
         self.pool_bytes = pool_bytes
         self._stream = ctypes.c_void_p()
         self._event = ctypes.c_void_p()
-        cudart.set_device(device)
         cudart.lib().cudaStreamCreate.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
         cudart.lib().cudaStreamCreate.restype = ctypes.c_int
         cudart.lib().cudaEventCreate.argtypes = [ctypes.POINTER(ctypes.c_void_p)]

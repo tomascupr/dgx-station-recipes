@@ -323,6 +323,62 @@ class ThresholdTest(unittest.TestCase):
         self.assertTrue(np.array_equal(local_ids(ids, [5, 1]), np.array([[-1, 0], [1, -1]], dtype=np.int32)))
 
 
+class HostCheckTest(unittest.TestCase):
+    def test_gpu_choice_is_by_name_not_index(self):
+        sys.path.insert(0, str(ROOT / "peer"))
+        from gpus import norm_pci, parse_gpu_csv, role_rows
+        self.assertEqual(norm_pci("00000000:81:00.0"), norm_pci("0000:81:00.0"))
+        text = "GPU-RTX, 00000000:01:00.0, NVIDIA RTX PRO 6000 Blackwell, 100\n" \
+               "GPU-GB, 00000000:81:00.0, NVIDIA GB300, 50\n"
+        rows = parse_gpu_csv(text)
+        self.assertEqual(role_rows(rows, "rtx")[0]["uuid"], "GPU-RTX")
+        self.assertEqual(role_rows(rows, "gb300")[0]["uuid"], "GPU-GB")
+        self.assertEqual(rows[0]["used_mib"], 100)
+
+    def test_preflight_catches_a_live_engine_and_a_busy_gpu(self):
+        sys.path.insert(0, str(ROOT / "peer"))
+        from preflight import cmdline_hits, gpu_blockers, port_listening
+        self.assertEqual(cmdline_hits(["python", "VLLM::EngineCore --model x"]), ["VLLM::EngineCore --model x"])
+        self.assertEqual(cmdline_hits(["peer_server3"]), ["peer_server3"])
+        self.assertEqual(cmdline_hits(["inkling2 m3"]), [])
+        sample = "sl local_address rem_address st\n0: 00000000:7533 00000000:0000 0A\n"
+        self.assertTrue(port_listening(sample, 30003))
+        self.assertFalse(port_listening(sample, 30008))
+        rows = [
+            {"uuid": "GPU-GB", "pci": "0000:81:00.0", "name": "NVIDIA GB300", "used_mib": 200000},
+            {"uuid": "GPU-RTX", "pci": "0000:01:00.0", "name": "NVIDIA RTX PRO 6000", "used_mib": 10},
+        ]
+        blocked = gpu_blockers(rows, [{"uuid": "GPU-GB", "pid": "9", "process": "VLLM::EngineCore"}], 2048)
+        self.assertTrue(any("compute app" in line for line in blocked))
+        self.assertTrue(any("200000" in line for line in blocked))
+        self.assertEqual(gpu_blockers(
+            [{"uuid": "GPU-GB", "pci": "x", "name": "NVIDIA GB300", "used_mib": 10},
+             {"uuid": "GPU-RTX", "pci": "y", "name": "NVIDIA RTX PRO 6000", "used_mib": 10}],
+            [], 2048), [])
+
+    def test_docker_error_is_not_an_absent_container(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = Path(tmp) / "docker"
+            fake.write_text("#!/bin/sh\necho permission denied >&2\nexit 1\n")
+            fake.chmod(0o755)
+            denied = subprocess.run(
+                ["bash", "-c", "set -euo pipefail; . serve/docker.sh; container_state ds41"],
+                cwd=ROOT, capture_output=True, text=True,
+                env={**os.environ, "DOCKER": str(fake)})
+            self.assertNotEqual(denied.returncode, 0)
+            self.assertIn("not treated as absent", denied.stderr)
+            missing = Path(tmp) / "missing"
+            missing.write_text("#!/bin/sh\necho 'Error: No such object: ds41' >&2\nexit 1\n")
+            missing.chmod(0o755)
+            gone = subprocess.run(
+                ["bash", "-c", "set -euo pipefail; . serve/docker.sh; container_state ds41"],
+                cwd=ROOT, capture_output=True, text=True,
+                env={**os.environ, "DOCKER": str(missing)})
+            self.assertEqual(gone.returncode, 0, gone.stderr)
+            self.assertEqual(gone.stdout.strip(), "absent")
+
+
 class ScriptTest(unittest.TestCase):
     def test_launch_scripts_do_not_stop_dsv41(self):
         for rel in ("inkling2", "serve/serve.sh", "kernels/build.sh", "m3.sh"):
@@ -350,6 +406,18 @@ class ScriptTest(unittest.TestCase):
         self.assertIn("CUDA_HOME", build)
         self.assertNotIn("nvidia-smi", code)
         self.assertIn("30008", (ROOT / "config" / "recipe.env").read_text())
+        banned = []
+        for path in ROOT.rglob("*"):
+            if not path.is_file() or path.suffix in {".so", ".pyc"}:
+                continue
+            if any(part in {"third_party", "__pycache__", "prebuilt"} for part in path.parts):
+                continue
+            data = path.read_bytes()
+            if b"\0" in data:
+                continue
+            if b"3000" + b"6" in data:
+                banned.append(str(path.relative_to(ROOT)))
+        self.assertEqual(banned, [])
         nvcc = os.environ.get("NVCC")
         cuda = os.environ.get("CUDA_HOME")
         if not nvcc and cuda and os.path.isfile(os.path.join(cuda, "bin", "nvcc")):

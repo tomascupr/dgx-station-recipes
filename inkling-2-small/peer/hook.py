@@ -82,6 +82,13 @@ def install() -> None:
             if gpu["so"] is None:
                 gpu["so"] = open_so(so_path)
             import torch
+            from gpus import cuda_ordinal, find
+            chosen = find("gb300")
+            torch.cuda.set_device(cuda_ordinal(chosen["pci"]))
+            visible = torch.cuda.get_device_name()
+            if "GB300" not in visible:
+                raise RuntimeError(f"INKLING2_PEER is on {visible}, not the GB300 ({chosen['uuid']})")
+            print(f"INKLING2_PEER GPU {visible} {chosen['uuid']}", flush=True)
             hot = load_members(model_dir, layer, row["hot"], row["quant"])
             self._inkling_hot = {k: (torch.as_tensor(np.ascontiguousarray(v), device="cuda")
                                      if isinstance(v, np.ndarray) else v)

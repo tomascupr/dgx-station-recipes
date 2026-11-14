@@ -12,12 +12,15 @@ ROOT=$(cd "$(dirname "$0")" && pwd)
 : "${INKLING2_PORT:=${INKLING2_DEFAULT_PORT}}"
 : "${INKLING2_HOST:=${INKLING2_DEFAULT_HOST}}"
 : "${INKLING2_SEGMENT:=${INKLING2_DEFAULT_SEGMENT}}"
+# shellcheck disable=SC1091
+. "$ROOT/serve/docker.sh"
 YES=0
 if [ "${1:-}" = --yes ]; then YES=1; fi
 if [ "${1:-}" = --dry-run ]; then
   cat <<EOF
 m3 steps, each an estimate, not a measurement. The plan's whole window is 4-6 h.
-  1 preflight          about 2 min
+  0 docker pull        while dsv41 may still be up; arm64 image, 11.28 GB compressed
+  1 preflight          about 2 min, after dsv41 is already down
   2 kernels/build.sh   about 15 min
   3 inkling2 validate  about 60-90 min
   4 routing profile    about 20-40 min, including eager model load
@@ -46,14 +49,23 @@ gpu() {
   nvidia-smi --query-gpu=index,name,memory.free,uuid --format=csv,noheader
 }
 
+gpu_uuid() {
+  PYTHONPATH="$ROOT/peer${PYTHONPATH:+:$PYTHONPATH}" \
+    python3 -c 'import sys; from gpus import find; print(find(sys.argv[1])["uuid"])' "$1"
+}
+
+echo "step 0 pull image"
+echo "DOCKER='${DOCKER}'. The operator needs sudo; this account is not in the docker group."
+echo "This pull can run while dsv41 is up. Image ${INKLING2_SUPPORTED_IMAGE}, linux/arm64, 11.28 GB compressed."
+pause "pull time depends on the link; it is outside the downtime window"
+_docker pull --platform linux/arm64 "$INKLING2_SUPPORTED_IMAGE"
+
 echo "step 1 preflight"
 pause "about 2 min"
-if command -v docker >/dev/null 2>&1; then
-  if docker inspect ds41 >/dev/null 2>&1 || docker inspect ds41-sidecar >/dev/null 2>&1; then
-    echo "ds41 containers are still present. This script will not stop them." >&2
-    exit 1
-  fi
-fi
+require_absent ds41
+require_absent ds41-sidecar
+export INKLING2_GPU_IDLE_MIB="${INKLING2_GPU_IDLE_MIB:-2048}"
+PYTHONPATH="$ROOT/peer${PYTHONPATH:+:$PYTHONPATH}" python3 "$ROOT/peer/preflight.py"
 echo "host MemAvailable: $(awk '/MemAvailable/ {print $2}' /proc/meminfo) kB"
 echo "Grace is about 494 GiB. dsv41 normally holds a large part of it, which is why it has to be down before this step."
 export INKLING2_PLACEMENT
@@ -92,15 +104,21 @@ CUDA_HOME=${CUDA_HOME:-/usr/local/cuda-13.2} "$ROOT/kernels/build.sh" | tee "$LO
 
 echo "step 3 validate"
 pause "about 60-90 min"
-INKLING2_MODEL_DIR="$INKLING2_MODEL_DIR" python3 "$ROOT/peer/validate.py" --model-dir "$INKLING2_MODEL_DIR" \
+GB=$(gpu_uuid gb300)
+RTX=$(gpu_uuid rtx)
+echo "GB300 ${GB}"
+echo "RTX PRO 6000 ${RTX}"
+CUDA_VISIBLE_DEVICES="${GB},${RTX}" INKLING2_MODEL_DIR="$INKLING2_MODEL_DIR" \
+  python3 "$ROOT/peer/validate.py" --model-dir "$INKLING2_MODEL_DIR" \
   | tee "$LOG/validate.log"
 
 echo "step 4 routing profile"
 pause "about 20-40 min, including eager model load"
-GB=$(nvidia-smi --query-gpu=name,uuid --format=csv,noheader | awk -F', ' 'index($1,"GB300"){print $2; exit}')
-[ -n "$GB" ] || { echo "no GB300" >&2; exit 1; }
-docker rm -f inkling2 >/dev/null 2>&1 || true
-docker run -d --name inkling2 --gpus "device=${GB}" --ipc host --network host \
+[ -n "$GB" ] || { echo "no GB300 uuid" >&2; exit 1; }
+if [ "$(container_state inkling2)" = present ]; then
+  _docker rm -f inkling2
+fi
+_docker run -d --name inkling2 --gpus "device=${GB}" --ipc host --network host \
   -v "$INKLING2_MODEL_DIR:/model:ro" -v "$ROOT:/w:ro" -v "$INKLING2_HOME:/out" \
   -e PYTHONPATH=/w/routing \
   -e INKLING2_ROUTE_OUT=/out/profile.json \
@@ -122,7 +140,7 @@ while IFS= read -r line; do
     -d "$(python3 -c 'import json,sys; print(json.dumps({"model":"inkling-2-small","messages":[{"role":"user","content":sys.argv[1]}],"max_tokens":8}))' "$line")" \
     >> "$LOG/calibration.jsonl" || true
 done < "$ROOT/routing/calibration.txt"
-docker rm -f inkling2 >/dev/null
+_docker rm -f inkling2
 echo "profile $INKLING2_HOME/profile.json"
 
 echo "step 5 plan"
@@ -132,8 +150,7 @@ pause "about 2 min"
 
 echo "step 6 split smoke"
 pause "about 30-180 min; a first image compile can take the rest of the window"
-RTX=$(nvidia-smi --query-gpu=name,uuid --format=csv,noheader | awk -F', ' 'index($1,"RTX"){print $2; exit}')
-[ -n "$RTX" ] || { echo "no RTX" >&2; exit 1; }
+[ -n "$RTX" ] || { echo "no RTX PRO 6000 uuid" >&2; exit 1; }
 rm -f "$INKLING2_SEGMENT"
 python3 - << PY
 import os, sys
@@ -146,7 +163,7 @@ CUDA_VISIBLE_DEVICES="$RTX" INKLING2_ALLOW_UNVALIDATED=1 INKLING2_MODEL_DIR="$IN
   --model-dir "$INKLING2_MODEL_DIR" --so "$ROOT/peer/prebuilt/peer_inkling_rtx_sm120.so" \
   > "$LOG/sidecar.log" 2>&1 &
 echo $! > "$LOG/sidecar.pid"
-docker run -d --name inkling2 --gpus "device=${GB}" --ipc host --network host \
+_docker run -d --name inkling2 --gpus "device=${GB}" --ipc host --network host \
   -v "$INKLING2_MODEL_DIR:/model:ro" -v "$ROOT:/w:ro" -v "$INKLING2_SEGMENT:/dev/shm/inkling2-peer" \
   -e PYTHONPATH=/w/routing \
   -e INKLING2_PEER=1 -e INKLING2_ALLOW_UNVALIDATED=1 \
@@ -191,8 +208,12 @@ echo "spot check saved the excerpt and one generation. It is not an eval score."
 echo "step 8 teardown"
 pause "about 1 min"
 if [ -f "$LOG/sidecar.pid" ]; then kill "$(cat "$LOG/sidecar.pid")" 2>/dev/null || true; fi
-docker rm -f inkling2 >/dev/null 2>&1 || true
+if [ "$(container_state inkling2)" = present ]; then
+  _docker rm -f inkling2
+fi
 rm -f "$INKLING2_SEGMENT"
 echo "inkling2 is stopped. This script did not start dsv41."
 echo "When you want dsv41 back, you run: sudo sh ~/ds41.sh uncensored up"
+echo "After that, this should print 200:"
+echo "curl -s -o /dev/null -w '%{http_code}' localhost:30003/health"
 echo "done $LOG"

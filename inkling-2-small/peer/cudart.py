@@ -64,6 +64,33 @@ def set_device(index: int) -> None:
     check(lib().cudaSetDevice(index), "cudaSetDevice")
 
 
+def device_count() -> int:
+    count = ctypes.c_int()
+    fn = lib().cudaGetDeviceCount
+    fn.argtypes = [ctypes.POINTER(ctypes.c_int)]
+    fn.restype = ctypes.c_int
+    check(fn(ctypes.byref(count)), "cudaGetDeviceCount")
+    return int(count.value)
+
+
+def get_device() -> int:
+    current = ctypes.c_int()
+    fn = lib().cudaGetDevice
+    fn.argtypes = [ctypes.POINTER(ctypes.c_int)]
+    fn.restype = ctypes.c_int
+    check(fn(ctypes.byref(current)), "cudaGetDevice")
+    return int(current.value)
+
+
+def pci_bus_id(device: int) -> str:
+    buf = ctypes.create_string_buffer(64)
+    fn = lib().cudaDeviceGetPCIBusId
+    fn.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_int]
+    fn.restype = ctypes.c_int
+    check(fn(buf, 64, device), "cudaDeviceGetPCIBusId")
+    return buf.value.decode()
+
+
 def alloc(nbytes: int) -> int:
     ptr = ctypes.c_void_p()
     check(lib().cudaMalloc(ctypes.byref(ptr), nbytes), "cudaMalloc")

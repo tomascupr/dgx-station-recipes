@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import subprocess
 import sys
 
 import numpy as np
@@ -40,17 +39,17 @@ def f32_to_bf16_f32(x: np.ndarray) -> np.ndarray:
     return _bf16_to_f32(raw.tobytes())
 
 
-def gpus() -> list[tuple[int, str]]:
-    text = subprocess.check_output(
-        ["nvidia-smi", "--query-gpu=index,name", "--format=csv,noheader"], text=True)
-    out = []
-    for line in text.splitlines():
-        if not line.strip():
-            continue
-        index, name = line.split(", ", 1)
-        if "GB300" in name or "RTX" in name:
-            out.append((int(index), name.strip()))
-    return out
+def selected_gpus() -> list[dict]:
+    """GB300 first, then RTX PRO 6000. The ordinal is the CUDA device, matched by PCI id."""
+    from gpus import cuda_ordinal, find
+    chosen = []
+    for role in ("gb300", "rtx"):
+        gpu = find(role)
+        gpu = dict(gpu)
+        gpu["ordinal"] = cuda_ordinal(gpu["pci"])
+        gpu["role"] = role
+        chosen.append(gpu)
+    return chosen
 
 
 def so_for(name: str, root: str) -> tuple[str, str]:
@@ -73,7 +72,10 @@ def run_case(peer, bank: dict, tokens: int) -> dict:
     ids = np.full((tokens, 1), TARGET, dtype=np.int32)
     route = np.full((tokens, 1), 0.5, dtype=np.float64)
     xq = quantize_activation(x, kind)
-    cudart.set_device(int(os.environ.get("INKLING2_VALIDATE_DEVICE", "0")))
+    raw = os.environ.get("INKLING2_VALIDATE_DEVICE")
+    if raw is None or raw == "":
+        raise SystemExit("INKLING2_VALIDATE_DEVICE is unset; refusing CUDA ordinal 0")
+    cudart.set_device(int(raw))
     x_b = _f32_to_bf16(x.astype(np.float32)).tobytes()
     dx = cudart.alloc(len(x_b))
     dids = cudart.alloc(ids.nbytes)
@@ -241,18 +243,18 @@ def main() -> None:
         print("bf16 ulp is 1/128; three bf16 stores plus fp32-vs-fp64 accumulation of K=4608")
         return
     root = os.path.abspath(os.path.join(HERE, ".."))
-    devices = gpus()
-    if not devices:
-        raise SystemExit("no GB300 or RTX visible")
+    devices = selected_gpus()
     failed = 0
-    for index, name in devices:
-        os.environ["INKLING2_VALIDATE_DEVICE"] = str(index)
+    for gpu in devices:
+        ordinal = gpu["ordinal"]
+        name = gpu["name"]
+        os.environ["INKLING2_VALIDATE_DEVICE"] = str(ordinal)
         path, arch = so_for(name, root)
         from so import open_so
         peer = open_so(path)
         import cudart
-        cudart.set_device(index)
-        print(f"device {index} {name} {arch} {path}", flush=True)
+        cudart.set_device(ordinal)
+        print(f"device cuda:{ordinal} {name} {gpu['uuid']} {arch} {path}", flush=True)
         for kind, layer in LAYERS:
             bank = load_members(a.model_dir, layer, list(EXPERTS), kind)
             print(f"  stored scales {kind} layer {layer}: "
