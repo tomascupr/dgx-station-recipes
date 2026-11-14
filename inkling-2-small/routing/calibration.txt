@@ -1,0 +1,20 @@
+# Calibration prompts for the routing profile. About four thousand tokens
+# if a token is four characters. That count is an estimate, not a tokenizer run.
+# The collector records expert hits; it does not score the answers.
+
+Explain the difference between a block-scaled NVFP4 weight and an MXFP8 weight in one paragraph.
+Write a short function that returns the greater of two integers without calling a library.
+What is the role of a mixture-of-experts router, and why would a bias term change which experts are chosen?
+Summarize how a residual connection lets a deep stack keep a copy of its input.
+Give three careful sentences on why a decode step with one new token is limited by weight traffic.
+A user asks for a recipe for oatmeal. Answer in four sentences and stop.
+Translate the sentence "the cold experts live on the second GPU" into plain language a new teammate would understand.
+List the steps to check that a service is healthy before sending it real traffic.
+Write a tiny state machine with two states, idle and busy, and say what each transition means.
+Explain softmax of log-sigmoid scores in words, without a formula.
+A programmer sees an out-of-memory error on a 250 GiB GPU. What should they measure before changing code?
+Describe a unit test that would catch a swapped expert id.
+What does it mean for a checkpoint to store one scale per sixteen values along a row?
+Give a short answer a careful engineer would give to "is this number a measurement or an estimate?"
+Repeat, in new words, why a spill tier on the host is different from a tier on a second GPU.
+End with the single word done.

@@ -34,11 +34,11 @@ is not copied here as a forecast.
 
 ## What is not validated
 
-* The CUTLASS serving GEMMs (`kernels/csrc/inkling_grouped.cuh`, built
-  `-arch=sm_103a` and `-arch=sm_120a`). They have not been executed. The FP64
-  kernels remain the numeric reference. `./kernels/build.sh` needs
-  `CUDA_HOME` on the Station (`/usr/local/cuda-13.2`) and CUTLASS
-  `b2f249acd203`.
+* The CUTLASS serving GEMMs. They compile, and they have not been launched.
+  `./inkling2 validate` is the device diff. `./inkling2 m3` is the first GPU
+  window. The GEMMs stay off unless `INKLING2_ALLOW_UNVALIDATED=1`. Hot
+  experts use the sm_103a object in-process, cold experts use the sm_120a
+  object in the sidecar, and Grace spill stays on the CPU.
 * The vLLM hook (`peer/hook.py`, `routing/collect.py`) against image
   `vllm/vllm-openai:inkling-2-small` or PR
   [vllm#67325](https://github.com/vllm-project/vllm/pull/67325) head `d664cd1e`.

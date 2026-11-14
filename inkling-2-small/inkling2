@@ -31,13 +31,16 @@ inkling2: Inkling 2 Small, native NVFP4 + MXFP8, on a DGX Station
   inkling2 up
   inkling2 down
   inkling2 status
+  inkling2 validate [--thresholds]
+  inkling2 m3 [--dry-run|--yes]
 
 up starts day-0 vLLM on the GB300 only. It does not stop dsv41. If the ds41
 or ds41-sidecar container exists, up refuses. Removing dsv41 needs the
 owner's approval, then that recipe's own ./ds41 down.
 
-The RTX sidecar and the grouped GEMMs are unvalidated. Do not treat
-./inkling2 up as a finished peer server. See README.md and docs/SMOKE.md.
+The RTX sidecar and the grouped GEMMs stay off unless
+INKLING2_ALLOW_UNVALIDATED=1. ./inkling2 validate is the device diff.
+./inkling2 m3 is the first GPU window. See docs/SMOKE.md.
 EOF
 }
 
@@ -69,6 +72,8 @@ cmd_test() {
   python3 -m unittest discover -s "$ROOT/verify" -v
 }
 
+cmd_validate() { exec python3 "$ROOT/peer/validate.py" "$@"; }
+cmd_m3() { exec "$ROOT/m3.sh" "$@"; }
 cmd_up() { exec "$ROOT/serve/serve.sh" up; }
 cmd_down() { exec "$ROOT/serve/serve.sh" down; }
 cmd_status() { exec "$ROOT/serve/serve.sh" status; }
@@ -76,6 +81,8 @@ cmd_status() { exec "$ROOT/serve/serve.sh" status; }
 case "${1:-}" in
   plan) shift; cmd_plan "$@" ;;
   test) shift; cmd_test "$@" ;;
+  validate) shift; cmd_validate "$@" ;;
+  m3) shift; cmd_m3 "$@" ;;
   up) shift; cmd_up "$@" ;;
   down) shift; cmd_down "$@" ;;
   status) shift; cmd_status "$@" ;;

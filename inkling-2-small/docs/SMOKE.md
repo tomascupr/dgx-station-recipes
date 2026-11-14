@@ -4,6 +4,40 @@ The plan's estimate for this window is **4–6 hours** of wall time. That is an
 estimate of the procedure, not a measurement. Do not start it until the owner
 has approved taking dsv41 down. This script will not take it down for you.
 
+## Commands
+
+From `inkling-2-small`, after the owner has already stopped dsv41:
+
+```bash
+./inkling2 m3
+```
+
+That is the whole window. It stops between steps until you type `go`, and
+writes `$HOME/.inkling2/m3/<timestamp>/`. `./inkling2 m3 --dry-run` prints
+the steps and does not touch a GPU. Estimates below are not measurements.
+The plan's figure for the whole window is 4–6 h.
+
+| Step | Command inside m3 | Estimate |
+|---|---|---|
+| 1 | preflight: dsv41 already gone, free memory | about 2 min |
+| 2 | `CUDA_HOME=/usr/local/cuda-13.2 ./kernels/build.sh` | about 15 min |
+| 3 | `./inkling2 validate` | about 60–90 min |
+| 4 | eager vLLM, `routing/calibration.txt` (about 4k tokens, chars/4) | about 20–40 min, including model load |
+| 5 | `./inkling2 plan --from-hf --profile ...` | about 2 min |
+| 6 | sidecar on the RTX plus vLLM with `INKLING2_ALLOW_UNVALIDATED=1`, one generate | about 30–180 min; a first image compile can take the rest of the window |
+| 7 | print a few `.eval_results` files and one more generate | about 10 min |
+| 8 | stop inkling2 and the sidecar | about 1 min |
+
+Step 8 does not start dsv41. You do that yourself:
+
+```bash
+sudo sh ~/ds41.sh uncensored up
+```
+
+`./inkling2 validate --thresholds` prints the pass bar without a GPU. The bar
+is max absolute error at most 2.5% of max(|fp64 reference|, 1). The serving
+kernel stores bf16 three times (gate/up, SiTU, down); one bf16 ulp is 1/128.
+
 ## 0. Before the window
 
 On a CPU, from this directory:
@@ -36,90 +70,15 @@ objects are `peer/prebuilt/peer_inkling_gb300_sm103.so` and
 `peer_inkling_rtx_sm120.so`. They are UNVALIDATED even after a compile: they
 have not been launched.
 
-## 1. Stop dsv41 (owner approval, ~30–60 min in the plan)
-
-```bash
-cd ../deepseek-v4.1-flash && ./ds41 down
-```
-
-Confirm the GB300 and the RTX are free (`nvidia-smi`). Leave enough time at
-the end of the window to bring dsv41 back and see it serve. Its first start
-can recompile.
-
-## 2. Day-0 smoke on the GB300 (~the rest of the window)
-
-```bash
-cd ../inkling-2-small
-export INKLING2_MODEL_DIR=/data/models/Inkling-2-Small
-./inkling2 up
-```
-
-This starts `vllm/vllm-openai:inkling-2-small` on the GB300 only. It does not
-mount the peer hook and does not start a sidecar. First launch compiles and
-can take hours; watch `docker logs -f inkling2`. Success for this step is one
-health check and one short generate:
-
-```bash
-curl -sf http://127.0.0.1:${INKLING2_PORT:-30008}/health
-curl -s http://127.0.0.1:${INKLING2_PORT:-30008}/v1/chat/completions -H 'Content-Type: application/json' \
-  -d '{"model":"inkling-2-small","messages":[{"role":"user","content":"Say hi."}],"max_tokens":16}'
-```
-
-If the process dies in an SM 10.3 kernel, stop. That is the plan's signal to
-try `lmsysorg/sglang:dev-inkling-2-small` later, not to debug the unvalidated
-`.cu` in the same window. Save the log.
-
-## 3. Routing profile (same window, if the day-0 process runs)
-
-Restart with the collector, eager, no CUDA graphs. The collector imports
-`vllm.models.inkling2.moe.Inkling2MoE` and writes
-`inkling2-expert-profile-v1` JSON. It is unvalidated against the image.
-
-```bash
-./inkling2 down
-docker run --rm --gpus device=<GB300-uuid> --network host --ipc host \
-  -v "$INKLING2_MODEL_DIR:/model:ro" -v "$PWD:/w:ro" \
-  -v "$HOME/.inkling2:/out" \
-  -e PYTHONPATH=/w/routing \
-  -e INKLING2_ROUTE_OUT=/out/profile.json \
-  -e HF_HUB_OFFLINE=1 \
-  -e VLLM_USE_V2_MODEL_RUNNER=1 \
-  vllm/vllm-openai:inkling-2-small \
-  --model /model --served-model-name inkling-2-small \
-  --tensor-parallel-size 1 --enforce-eager \
-  --host 127.0.0.1 --port "${INKLING2_PORT:-30008}"
-```
-
-Send a calibration set (a few thousand tokens of the prompts you care about),
-then `./inkling2 down` so the process exits and the profile is flushed.
-Rebuild the map:
-
-```bash
-./inkling2 plan --from-hf --profile "$HOME/.inkling2/profile.json" \
-  --out "$HOME/.inkling2/placement.json"
-```
-
-The new file still keeps every MXFP8 expert on the GB300. Read the printed
-byte totals before trusting it.
-
-## 4. Peer hook
-
-Do not enable `INKLING2_PEER` in this first window unless the day-0 generate
-already worked and time remains. With the variable set, `peer/hook.py`
-replaces `Inkling2MoE.forward` and the hot GEMM raises, on purpose, because
-`kernels/csrc` has not been compared to `kernels/reference/quant.py`. A later
-window can load the `.so` and diff a handful of tokens against that reference
-before any benchmark.
-
-## 5. Restore dsv41
-
-```bash
-./inkling2 down
-cd ../deepseek-v4.1-flash && ./ds41 up
-```
-
-Confirm a short generate on the DeepSeek port. Do not leave the box on Inkling
-if dsv41 was the service the owner expects.
+The operator stops dsv41 before `./inkling2 m3`. The script checks that the
+ds41 containers are already gone and refuses if they are not. It never stops
+them. Step 6 is the split: the GB300 process loads `peer/hook.py` with
+`INKLING2_ALLOW_UNVALIDATED=1`, and the RTX sidecar loads the sm_120a object.
+Without that flag the hook raises and the sidecar stays on the numpy
+reference. If the GB300 process dies in an SM 10.3 kernel during step 4 or 6,
+stop the window. That is the plan's signal to try
+`lmsysorg/sglang:dev-inkling-2-small` later. The planner still keeps every
+MXFP8 expert on the GB300.
 
 ## Quality parity (later window, plan estimate 4–8 h)
 
@@ -133,7 +92,8 @@ here.
 
 ## Perf (later window, plan estimate 2–3 h)
 
-Batch 1 and 8 streams, after quality. Report the measured tok/s next to the
-plan's bandwidth estimates and say which is which. Do not describe a match to
-those estimates as hitting a forecast. This tree does not print a tok/s
-figure.
+Batch 1 and 8 streams, after quality. `./inkling2 validate` prints a measured
+microsecond time and TB/s for each expert GEMM call (weights, scales, x, and
+y of that call). Those figures are measurements of the call. The plan's
+bandwidth numbers stay estimates. Do not describe a match between them as
+hitting a forecast. This tree does not print a tok/s figure.

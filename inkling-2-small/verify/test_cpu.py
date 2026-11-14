@@ -295,9 +295,24 @@ class RowTest(unittest.TestCase):
             self.assertEqual(batch[("model.llm.layers.0.mlp.experts.w13_weight", 0)], raw[:16])
 
 
+class ThresholdTest(unittest.TestCase):
+    def test_bar_is_two_and_a_half_percent_of_the_peak(self):
+        sys.path.insert(0, str(ROOT / "peer"))
+        from thresholds import judge
+        ref = np.ones((4, 4))
+        self.assertTrue(judge(ref, ref + 0.02)["pass"])
+        self.assertFalse(judge(ref, ref + 0.03)["pass"])
+
+    def test_local_ids_keep_strangers_out(self):
+        sys.path.insert(0, str(ROOT / "peer"))
+        from bank import local_ids
+        ids = np.array([[0, 5], [1, -1]])
+        self.assertTrue(np.array_equal(local_ids(ids, [5, 1]), np.array([[-1, 0], [1, -1]], dtype=np.int32)))
+
+
 class ScriptTest(unittest.TestCase):
     def test_launch_scripts_do_not_stop_dsv41(self):
-        for rel in ("inkling2", "serve/serve.sh", "kernels/build.sh"):
+        for rel in ("inkling2", "serve/serve.sh", "kernels/build.sh", "m3.sh"):
             text = (ROOT / rel).read_text()
             code = "\n".join(line.split("#", 1)[0] for line in text.splitlines())
             code = re.sub(r"<<EOF.*?^EOF", "", code, count=1, flags=re.M | re.S)
@@ -326,7 +341,7 @@ class ScriptTest(unittest.TestCase):
         cuda = os.environ.get("CUDA_HOME")
         if not nvcc and cuda and os.path.isfile(os.path.join(cuda, "bin", "nvcc")):
             nvcc = os.path.join(cuda, "bin", "nvcc")
-        if nvcc and os.path.isfile(nvcc) or (nvcc and shutil.which(nvcc)):
+        if nvcc and (os.path.isfile(nvcc) or shutil.which(nvcc)):
             compiled = subprocess.run(["bash", str(ROOT / "kernels" / "build.sh")],
                                       check=False, capture_output=True, text=True)
             self.assertEqual(compiled.returncode, 0, compiled.stderr)

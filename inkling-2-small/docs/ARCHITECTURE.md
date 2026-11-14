@@ -36,10 +36,11 @@ tensor. The GB300 loader's `coldskip` is that expert id not being in `hot`.
 ## Peer
 
 `peer/segment.py` is one request in flight in `/dev/shm/inkling2-peer`
-(1,191,936 bytes at hidden 4608, 64 tokens, top-8). The same offsets are in
-`kernels/csrc/inkling_proto.cuh`. The sidecar answers with the numpy
-reference. The `.cu` files are a one-thread-per-token fp64 kernel of the same
-formulas, built only by `kernels/build.sh`, and not called.
+(1,191,936 bytes at hidden 4608, 64 tokens, top-8). Hot experts call the
+sm_103a GEMM in-process. Cold experts cross the segment to the sm_120a GEMM
+in the sidecar. Spill experts stay on the CPU: the plan's Grace tier is a
+host dequant into the fp64 reference, not a host-mapped device GEMM and not
+a third GPU. None of the three run unless `INKLING2_ALLOW_UNVALIDATED=1`.
 
 ## Where the 14 Nov plan is off
 

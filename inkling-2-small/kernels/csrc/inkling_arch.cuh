@@ -65,14 +65,18 @@ inline constexpr int kMxfp8TileK = 128;
 
 #elif INKLING_ARCH == 120
 
-// 79d's grouped NVFP4 types (nv_float4_t, 128x128x128, 1x1x1,
-// KernelScheduleAuto) and 79a's bf16 epilogue. The templated
+// 79d's element types and KernelScheduleAuto, 79a's bf16 epilogue.
+// Tile N is 64, not 79d's 128: N=128 spilled about 80 B at 168 registers
+// and ptxas would not use more. N=64 compiles on sm_120a (the builder
+// allows N >= 8) and ptxas reports 0 spills at 118-119 registers.
+// There is no separate stage-count knob on KernelScheduleAuto.
 // KernelPtrArrayTmaWarpSpecializedPingpongBlockScaledSm120
-// (dispatch_policy.hpp:640) is not the schedule 79d instantiates.
+// (dispatch_policy.hpp:640) is a template; 79d does not instantiate it.
 using Nvfp4 = MakeGemm<
     cutlass::arch::Sm120, cutlass::nv_float4_t<cutlass::float_e2m1_t>,
-    cutlass::nv_float4_t<cutlass::float_e2m1_t>, cute::Shape<cute::_128, cute::_128, cute::_128>,
-    cute::Shape<cute::_1, cute::_1, cute::_1>, cutlass::gemm::collective::KernelScheduleAuto,
+    cutlass::nv_float4_t<cutlass::float_e2m1_t>,     cute::Shape<cute::_128, cute::_64, cute::_128>,
+    cute::Shape<cute::_1, cute::_1, cute::_1>,
+    cutlass::gemm::collective::KernelScheduleAuto,
     cutlass::epilogue::collective::EpilogueScheduleAuto, 32, 8>;
 using Nvfp4Gemm = Nvfp4::Gemm;
 using Nvfp4A = cutlass::nv_float4_t<cutlass::float_e2m1_t>;
@@ -80,12 +84,13 @@ using Nvfp4Scale = cutlass::float_ue4m3_t;
 inline constexpr int kNvfp4Block = 16;
 inline constexpr int kNvfp4TileK = 128;
 
-// 79c's tile and KernelScheduleAuto, mx_float8 on both sides (79c mixes
-// in MXFP6), 79a's bf16 epilogue. Alignment 16 is 79c's MXFP8 alignment.
+// Same 128x64x128 tile as NVFP4 on this target, for the same spill reason.
+// Element type and alignment 16 follow 79c's MXFP8 operand.
 using Mxfp8 = MakeGemm<
     cutlass::arch::Sm120, cutlass::mx_float8_t<cutlass::float_e4m3_t>,
-    cutlass::mx_float8_t<cutlass::float_e4m3_t>, cute::Shape<cute::_128, cute::_128, cute::_128>,
-    cute::Shape<cute::_1, cute::_1, cute::_1>, cutlass::gemm::collective::KernelScheduleAuto,
+    cutlass::mx_float8_t<cutlass::float_e4m3_t>,     cute::Shape<cute::_128, cute::_64, cute::_128>,
+    cute::Shape<cute::_1, cute::_1, cute::_1>,
+    cutlass::gemm::collective::KernelScheduleAuto,
     cutlass::epilogue::collective::EpilogueScheduleAuto, 16, 8>;
 using Mxfp8Gemm = Mxfp8::Gemm;
 using Mxfp8A = cutlass::mx_float8_t<cutlass::float_e4m3_t>;

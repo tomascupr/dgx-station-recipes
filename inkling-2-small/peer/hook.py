@@ -5,9 +5,12 @@ d664cd1e). ``route`` only understands a contiguous expert range, so the hook
 replaces ``forward``. It selects experts with the reference rule, publishes
 the token to ``/dev/shm/inkling2-peer``, and adds the sidecar's cold rows.
 
-The hot and spill GEMMs are the numpy reference when INKLING2_REFERENCE=1
-(the CPU tests). Otherwise they raise: the grouped kernels in kernels/csrc
-are UNVALIDATED and are not called from this hook. Attention stays in vLLM.
+Hot experts call the sm_103a GEMMs in-process. Cold experts are published
+to the sidecar, which calls the sm_120a GEMMs. Spill experts stay on the
+CPU: the plan's Grace tier is a host dequant plus the fp64 reference, not a
+third device kernel. All three stay behind INKLING2_ALLOW_UNVALIDATED=1.
+INKLING2_REFERENCE=1 keeps the numpy path the CPU tests use. Attention
+stays in vLLM.
 """
 from __future__ import annotations
 
@@ -47,12 +50,18 @@ def install() -> None:
         from segment import Layout, Segment
         from split import apply_tier
 
+        from bank import load_members, local_ids
+        from cpu_tier import CpuTier
+        from so import open_so
+
         cls = module.Inkling2MoE
         if getattr(cls, "_inkling_peer", False):
             return
         seg = Segment(segment_path, Layout(), create=False)
         seq = {"n": 0}
         quant_code = {"nvfp4": 0, "mxfp8": 1}
+        allow = os.environ.get("INKLING2_ALLOW_UNVALIDATED") == "1"
+        gpu = {"so": None}
 
         def _banks(self):
             banks = getattr(self, "_inkling_banks", None)
@@ -62,13 +71,65 @@ def install() -> None:
                     "Set INKLING2_REFERENCE=1 only for a tiny reference bank.")
             return banks
 
+        def _ensure_gpu(self, layer: int, row: dict):
+            if getattr(self, "_inkling_ready", False):
+                return
+            model_dir = os.environ["INKLING2_MODEL_DIR"]
+            so_path = os.environ.get(
+                "INKLING2_GB300_SO",
+                os.path.join(HERE, "prebuilt", "peer_inkling_gb300_sm103.so"))
+            if gpu["so"] is None:
+                gpu["so"] = open_so(so_path)
+            import torch
+            hot = load_members(model_dir, layer, row["hot"], row["quant"])
+            spill = load_members(model_dir, layer, row["spill"], row["quant"])
+            self._inkling_hot = {k: (torch.as_tensor(np.ascontiguousarray(v), device="cuda")
+                                     if isinstance(v, np.ndarray) else v)
+                                 for k, v in hot.items()}
+            self._inkling_hot["members"] = hot["members"]
+            self._inkling_spill = CpuTier(spill) if spill["n"] else None
+            self._inkling_ready = True
+
+        def _launch_hot(self, kind: str, flat_bf16, ids_local, route, hot) -> "np.ndarray":
+            import torch
+            tokens, topk = ids_local.shape
+            y = torch.zeros(tokens, flat_bf16.shape[-1], dtype=torch.bfloat16, device=flat_bf16.device)
+            denom = float(hot.get("denom13", 1.0))
+            gpu["so"].expert(
+                kind, tokens, topk, int(hot["n"]), int(flat_bf16.shape[-1]), 2304,
+                flat_bf16.data_ptr(), ids_local.data_ptr(), route.data_ptr(),
+                hot["w13"].data_ptr(), hot["s13"].data_ptr(),
+                hot["amax13"].data_ptr() if kind == "nvfp4" else 0,
+                hot["w2"].data_ptr(), hot["s2"].data_ptr(),
+                hot["amax2"].data_ptr() if kind == "nvfp4" else 0,
+                denom, y.data_ptr(), None)
+            return y.float().reshape(-1).cpu().numpy().reshape(tokens, -1)
+
+        def _cold(self, layer: int, kind: str, flat, ids, weights) -> np.ndarray:
+            y = np.zeros((flat.shape[0], flat.shape[1]), dtype=np.float64)
+            cap = seg.layout.max_tokens
+            for start in range(0, flat.shape[0], cap):
+                stop = min(start + cap, flat.shape[0])
+                seq["n"] = seq["n"] % 0xFFFF + 1
+                seg.publish(seq["n"], layer, quant_code[kind], flat[start:stop],
+                            ids[start:stop], weights[start:stop])
+                deadline = time.monotonic() + wait_s
+                while seg.resp() != seq["n"]:
+                    if time.monotonic() > deadline:
+                        raise RuntimeError("INKLING2_PEER: sidecar did not answer")
+                    time.sleep(0.0002)
+                y[start:stop] = seg.read_y(stop - start)
+            return y
+
         def forward(self, x, reduce=True, push=None, lora=None):
             if lora is not None or push is not None or not reduce:
                 raise RuntimeError("INKLING2_PEER covers one process that reduces")
             layer = getattr(self, "_inkling_layer", None)
             if layer is None:
                 raise RuntimeError("INKLING2_PEER: layer index was not bound")
-            flat = x.detach().float().reshape(-1, x.shape[-1]).cpu().numpy()
+            import torch
+            flat_t = x.detach().reshape(-1, x.shape[-1])
+            flat = flat_t.float().cpu().numpy()
             logits = flat @ self.gate.weight.detach().float().cpu().numpy().T
             bias = self.gate.bias.detach().float().cpu().numpy()
             weights, ids = select_experts(
@@ -80,25 +141,29 @@ def install() -> None:
                 banks = _banks(self)
                 y = apply_tier(flat, ids, weights, row["hot"], banks["hot"]["w13"], banks["hot"]["w2"],
                                kind, n_experts)
-            else:
+                if row["cold"]:
+                    y = y + _cold(layer, kind, flat, ids, weights)
+                if row["spill"]:
+                    y = y + apply_tier(
+                        flat, ids, weights, row["spill"], banks["spill"]["w13"], banks["spill"]["w2"],
+                        kind, n_experts)
+            elif not allow:
                 raise RuntimeError(
-                    "INKLING2_PEER: the GB300 grouped GEMM is UNVALIDATED "
-                    "(kernels/csrc, kernels/build.sh). The day-0 forward is still available "
-                    "with INKLING2_PEER unset.")
-            seq["n"] = seq["n"] % 0xFFFF + 1
-            seg.publish(seq["n"], layer, quant_code[kind], flat, ids, weights)
-            deadline = time.monotonic() + wait_s
-            while seg.resp() != seq["n"]:
-                if time.monotonic() > deadline:
-                    raise RuntimeError("INKLING2_PEER: sidecar did not answer")
-                time.sleep(0.0002)
-            y = y + seg.read_y(flat.shape[0])
-            if row["spill"] and reference:
-                y = y + apply_tier(
-                    flat, ids, weights, row["spill"], banks["spill"]["w13"], banks["spill"]["w2"],
-                    kind, n_experts)
+                    "INKLING2_PEER: grouped GEMMs are UNVALIDATED. "
+                    "Set INKLING2_ALLOW_UNVALIDATED=1 only after ./inkling2 validate passes. "
+                    "Day-0 forward is still available with INKLING2_PEER unset.")
+            else:
+                _ensure_gpu(self, layer, row)
+                ids_local = torch.as_tensor(local_ids(ids, row["hot"]), device=flat_t.device)
+                route = torch.as_tensor(np.ascontiguousarray(weights, dtype=np.float32), device=flat_t.device)
+                bf16 = flat_t if flat_t.dtype == torch.bfloat16 else flat_t.to(torch.bfloat16)
+                y = _launch_hot(kind, bf16, ids_local, route, self._inkling_hot)
+                if row["cold"]:
+                    y = y + _cold(layer, kind, flat, ids, weights)
+                if self._inkling_spill is not None:
+                    y = y + self._inkling_spill.forward(flat, ids, weights)
             out = x.new_empty(x.shape)
-            return out.copy_(__import__("torch").from_numpy(np.asarray(y, dtype=np.float32)))
+            return out.copy_(torch.from_numpy(np.asarray(y, dtype=np.float32)))
 
         cls.forward = forward
         cls._inkling_peer = True
