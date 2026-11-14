@@ -1,0 +1,22 @@
+Inkling 2 Small expert-split recipe
+======================================
+
+Part of dgx-station-recipes (MIT; see ../LICENSE). Copyright 2026 Tomas Cupr.
+The hot-on-GB300 / cold-on-RTX / spill-to-Grace shape follows Garner McCloud's
+deepseek-v4.1-flash recipe. This directory does not copy his kernels: those
+are MXFP4 for DeepSeek. The CUDA here is new, uncompiled, and marked
+UNVALIDATED.
+
+The checkpoint is thinkingmachines/Inkling-2-Small revision
+8361e7a31ae7e9966a49a91d3994fde618936c2b. This repository does not redistribute
+the weights.
+
+Expert numerics (E2M1 nibble order, E4M3, amax/2688, activation amax/1536,
+fouroversix_mae, UE8M0, interleaved w13, softcapped SwiGLU, sigmoid-bias
+top-8) were read from vLLM pull request 67325 at d664cd1e, file
+vllm/models/inkling2/, which is Apache-2.0, Copyright contributors to the
+vLLM project. The numpy in kernels/reference/quant.py is a reimplementation
+of those formulas, not a copy of that source. The denominator 2688 was also
+read from four bytes of layer 0's w13_weight_outer_scale_denominator (the
+value is 2688.0). 1536 is the constant in that vLLM file's `_row_scales`,
+not a value stored in the checkpoint.

@@ -3,6 +3,7 @@
 Serving recipes for an NVIDIA **DGX Station GB300**, each one a tested, one-command way to run a model on it and
 get a private, OpenAI-compatible endpoint:
 
+- **[`inkling-2-small/`](inkling-2-small/), Inkling 2 Small (native NVFP4 + MXFP8): by Tomas Cupr.** A CPU-side port of the expert split onto `thinkingmachines/Inkling-2-Small` at `8361e7a31`. Not run on the Station. No measured tok/s. `./inkling2 up` will not stop dsv41.
 - **[`kimi-k3.1-pro/`](kimi-k3.1-pro/), Kimi K3.1 Pro (2-bit experts): by Tomas Cupr.** A 2.78-trillion-parameter
   model with a 1.45 TiB checkpoint, whole, at about 30 tokens/s on the Station plus an RTX PRO 6000: routed experts
   repacked to 2 bits and spread over the RTX, the GB300 and Grace memory, under stock vLLM. Weights:
@@ -65,6 +66,6 @@ Then read that recipe's `README.md`.
 
 ## Licence
 
-MIT (see `LICENSE`), copyright 2026 Garner McCloud; `glm-5.3-flash-fp8/` and `kimi-k3.1-pro/` copyright 2026 Tomas Cupr, apart from the
-files its `NOTICE` credits to others. Each recipe's `NOTICE` lists the third-party code and data it includes and
+MIT (see `LICENSE`), copyright 2026 Garner McCloud; `glm-5.3-flash-fp8/`, `kimi-k3.1-pro/` and `inkling-2-small/` copyright 2026 Tomas Cupr, apart from the
+files a recipe's `NOTICE` credits to others. Each recipe's `NOTICE` lists the third-party code and data it includes and
 their licences. `glm-5.3-flash-fp8/` follows the design of Garner's `deepseek-v4.1-flash/`.
