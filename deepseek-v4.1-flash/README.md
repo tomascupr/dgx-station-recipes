@@ -222,6 +222,8 @@ the state tree to you, and `./ds41 install` can be re-run at any point.
 * `docs/WHAT-DID-NOT-WORK.md` — the measured negative results. Read this before you spend a weekend on an idea.
 * `docs/BUILD-FROM-SOURCE.md` — why this release does not build an image; kernel rebuild notes only.
 * `RESULTS.md` — every measurement, with its protocol.
+* `docs/BENCH-DSPARK-2026-11-14.md` — 14 Nov real-prompt DSpark benches. k=5 through batch 8
+  is the measured winner (+3–7% short, +8–11% long per stream at c=6–8).
 * `ACKNOWLEDGEMENTS.md` — the projects and people this stands on.
 * `hf/MODEL_CARD.md` — the Hugging Face card; the weights are the official DeepSeek release, not re-hosted here.
 
