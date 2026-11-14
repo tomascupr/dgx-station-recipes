@@ -19,7 +19,7 @@ The plan's figure for the whole window is 4–6 h.
 
 | Step | Command inside m3 | Estimate |
 |---|---|---|
-| 1 | preflight: dsv41 already gone, free memory | about 2 min |
+| 1 | preflight: dsv41 already gone, and MemAvailable covers the ~64 GiB spill tier | about 2 min |
 | 2 | `CUDA_HOME=/usr/local/cuda-13.2 ./kernels/build.sh` | about 15 min |
 | 3 | `./inkling2 validate` | about 60–90 min |
 | 4 | eager vLLM, `routing/calibration.txt` (about 4k tokens, chars/4) | about 20–40 min, including model load |
@@ -34,7 +34,7 @@ Step 8 does not start dsv41. You do that yourself:
 sudo sh ~/ds41.sh uncensored up
 ```
 
-`./inkling2 validate --thresholds` prints the pass bar without a GPU. The bar
+`./inkling2 validate` also diffs and times one host-resident expert per format on the GB300 and prints the measured TB/s of that copy. `./inkling2 validate --thresholds` prints the pass bar without a GPU. The bar
 is max absolute error at most 2.5% of max(|fp64 reference|, 1). The serving
 kernel stores bf16 three times (gate/up, SiTU, down); one bf16 ulp is 1/128.
 

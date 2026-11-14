@@ -29,6 +29,27 @@ extern "C" int inkling_gb300_expert_nvfp4(
       tokens, topk, experts, hidden, inter, x, ids, route, w13, s13, amax13, w2, s2, amax2, denom, y, stream);
 }
 
+extern "C" int inkling_gb300_expert_nvfp4_each(
+    int tokens, int topk, int experts, int hidden, int inter, const __nv_bfloat16* x, const int* ids,
+    const float* route, const uint8_t* const* w13, const uint8_t* const* s13, const float* amax13,
+    const uint8_t* const* w2, const uint8_t* const* s2, const float* amax2, float denom, __nv_bfloat16* y,
+    cudaStream_t stream) {
+  return inkling::expert::forward<inkling::arch::Nvfp4Gemm, inkling::arch::Nvfp4A, inkling::arch::Nvfp4A,
+                                  inkling::arch::Nvfp4Scale, 16, true>(
+      tokens, topk, experts, hidden, inter, x, ids, route, nullptr, nullptr, amax13, nullptr, nullptr, amax2,
+      denom, y, stream, w13, s13, w2, s2);
+}
+
+extern "C" int inkling_gb300_expert_mxfp8_each(
+    int tokens, int topk, int experts, int hidden, int inter, const __nv_bfloat16* x, const int* ids,
+    const float* route, const uint8_t* const* w13, const uint8_t* const* s13, const uint8_t* const* w2,
+    const uint8_t* const* s2, __nv_bfloat16* y, cudaStream_t stream) {
+  return inkling::expert::forward<inkling::arch::Mxfp8Gemm, inkling::arch::Mxfp8A, inkling::arch::Mxfp8A,
+                                  inkling::arch::Mxfp8Scale, 32, false>(
+      tokens, topk, experts, hidden, inter, x, ids, route, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+      1.f, y, stream, w13, s13, w2, s2);
+}
+
 extern "C" int inkling_gb300_expert_mxfp8(
     int tokens, int topk, int experts, int hidden, int inter, const __nv_bfloat16* x, const int* ids,
     const float* route, const uint8_t* w13, const uint8_t* s13, const uint8_t* w2, const uint8_t* s2,

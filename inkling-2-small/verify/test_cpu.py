@@ -303,6 +303,19 @@ class ThresholdTest(unittest.TestCase):
         self.assertTrue(judge(ref, ref + 0.02)["pass"])
         self.assertFalse(judge(ref, ref + 0.03)["pass"])
 
+    def test_spill_lru_reuses_a_slot(self):
+        sys.path.insert(0, str(ROOT / "peer"))
+        from spill_pool import Lru
+        lru = Lru(1)
+        slot, miss = lru.assign(("L", 1))
+        self.assertTrue(miss)
+        slot2, miss2 = lru.assign(("L", 1))
+        self.assertFalse(miss2)
+        self.assertEqual(slot, slot2)
+        _, miss3 = lru.assign(("L", 2))
+        self.assertTrue(miss3)
+        self.assertNotIn(("L", 1), lru.where)
+
     def test_local_ids_keep_strangers_out(self):
         sys.path.insert(0, str(ROOT / "peer"))
         from bank import local_ids

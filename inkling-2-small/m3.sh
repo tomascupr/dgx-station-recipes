@@ -55,6 +55,32 @@ if command -v docker >/dev/null 2>&1; then
   fi
 fi
 echo "host MemAvailable: $(awk '/MemAvailable/ {print $2}' /proc/meminfo) kB"
+echo "Grace is about 494 GiB. dsv41 normally holds a large part of it, which is why it has to be down before this step."
+export INKLING2_PLACEMENT
+python3 - << 'PY'
+import json
+import os
+info = open("/proc/meminfo").read()
+avail = int(info.split("MemAvailable:")[1].split()[0]) * 1024
+total = int(info.split("MemTotal:")[1].split()[0]) * 1024
+# Default spill tier: 96 NVFP4 experts across 40 layers.
+need = 96 * 40 * 17915912
+placement = os.environ.get("INKLING2_PLACEMENT", "")
+if placement and os.path.isfile(placement):
+    doc = json.load(open(placement))
+    need = 0
+    for row in doc["layers"].values():
+        n = len(row.get("spill") or [])
+        need += n * (17915912 if row["quant"] == "nvfp4" else 32845824)
+    print(f"spill bytes from {placement}")
+else:
+    print("no placement file yet; using the default 96 x 40 NVFP4 spill tier")
+print(f"MemTotal {total} bytes ({total/2**30:.2f} GiB); Grace is about 494 GiB")
+print(f"spill tier needs at least {need} bytes of packed experts ({need/2**30:.2f} GiB)")
+print(f"MemAvailable {avail} bytes ({avail/2**30:.2f} GiB)")
+if avail < need:
+    raise SystemExit("not enough free RAM for the Grace spill tier; dsv41 has to be down already")
+PY
 gpu | tee "$LOG/gpus.txt"
 [ -f "$INKLING2_MODEL_DIR/config.json" ] || { echo "missing $INKLING2_MODEL_DIR/config.json" >&2; exit 1; }
 rev=$(python3 -c "import json; print(json.load(open('$INKLING2_MODEL_DIR/config.json')).get('revision',''))" || true)
@@ -124,6 +150,7 @@ docker run -d --name inkling2 --gpus "device=${GB}" --ipc host --network host \
   -v "$INKLING2_MODEL_DIR:/model:ro" -v "$ROOT:/w:ro" -v "$INKLING2_SEGMENT:/dev/shm/inkling2-peer" \
   -e PYTHONPATH=/w/routing \
   -e INKLING2_PEER=1 -e INKLING2_ALLOW_UNVALIDATED=1 \
+  -e INKLING2_SPILL_POOL_GIB="${INKLING2_SPILL_POOL_GIB:-4}" \
   -e INKLING2_MODEL_DIR=/model -e INKLING2_PLACEMENT=/w/placement-mount.json \
   -e INKLING2_GB300_SO=/w/peer/prebuilt/peer_inkling_gb300_sm103.so \
   -e INKLING2_SEGMENT=/dev/shm/inkling2-peer \

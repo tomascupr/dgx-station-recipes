@@ -6,8 +6,10 @@ Runs on the DGX. There is no GPU in the authoring environment, so
 For each of GB300 and RTX, both formats, and 1, 8, 64 and 128 tokens all
 routed to one expert: load experts 0 and 1 from a real NVFP4 layer and a
 real MXFP8 layer, run the serving kernel and the fp64 reference, and judge
-with peer.thresholds. 128 tokens is a direct launch. The peer segment itself
-holds 64.
+with peer.thresholds. On the GB300 the same cases also run one expert whose
+packed bytes started in host memory: the copy engine stages it, the GEMM
+reads the staged device pointer, and the log prints that copy's TB/s.
+128 tokens is a direct launch. The peer segment itself holds 64.
 """
 from __future__ import annotations
 
@@ -133,6 +135,102 @@ def run_case(peer, bank: dict, tokens: int) -> dict:
     return result
 
 
+def _spill_cases(peer, model_dir: str) -> None:
+    """One host-resident expert, copied by the DMA engine, then the GEMM."""
+    import time
+
+    from spill_pool import SpillPool
+    for kind, layer in LAYERS:
+        bank = load_members(model_dir, layer, list(EXPERTS), kind)
+        one = _one_expert_bank(bank, EXPERTS[TARGET])
+        for tokens in COUNTS:
+            pool = SpillPool(lambda _layer: None, max(one["w13"].nbytes * 4, 1 << 20))
+            t0 = time.perf_counter()
+            queued = pool.prefetch(layer, [EXPERTS[TARGET]], one)
+            pool.sync_copy()
+            copy_s = time.perf_counter() - t0
+            view = pool.pointers(layer, EXPERTS[TARGET])
+            row = _run_ptrs(peer, one, tokens, view)
+            status = "PASS" if row["pass"] else "FAIL"
+            tb = (queued / copy_s / 1e12) if copy_s else 0.0
+            print(
+                f"  {status} spill {pool.mode} {kind} layer {layer} tokens/expert {tokens} "
+                f"max_abs {row['max_abs']:.3e} limit {row['limit_abs']:.3e} "
+                f"measured copy {copy_s * 1e6:.1f} us  {tb:.4f} TB/s "
+                f"({queued} bytes from Grace, including the pin on a miss; "
+                f"plan figure 0.355 TB/s is the plan's measurement)",
+                flush=True)
+            if not row["pass"]:
+                raise SystemExit("spill path failed the fp64 diff")
+
+
+def _run_ptrs(peer, bank: dict, tokens: int, view: dict) -> dict:
+    """GEMM and fp64 reference both read the staged device expert."""
+    import cudart
+    kind = bank["kind"]
+    rng = np.random.default_rng(10_000 + tokens)
+    x = f32_to_bf16_f32(rng.standard_normal((tokens, HIDDEN)).astype(np.float32))
+    ids = np.zeros((tokens, 1), dtype=np.int32)
+    route = np.full((tokens, 1), 0.5, dtype=np.float64)
+    xq = quantize_activation(x, kind)
+    x_b = _f32_to_bf16(x.astype(np.float32)).tobytes()
+    dx = cudart.alloc(len(x_b))
+    dids = cudart.alloc(ids.nbytes)
+    droute = cudart.alloc(tokens * 4)
+    dy = cudart.alloc(tokens * HIDDEN * 2)
+    drefx = cudart.alloc(tokens * HIDDEN * 8)
+    dref_route = cudart.alloc(route.nbytes)
+    dscratch = cudart.alloc(tokens * (INTER * 2 + INTER) * 8)
+    drefy = cudart.alloc(tokens * HIDDEN * 8)
+    da13 = da2 = 0
+    ptrs = {k: np.array([view[k]], dtype=np.uint64) for k in ("w13", "s13", "w2", "s2")}
+    try:
+        cudart.h2d(x_b, dx)
+        cudart.h2d(ids.tobytes(), dids)
+        cudart.h2d(np.ascontiguousarray(route, dtype=np.float32).tobytes(), droute)
+        cudart.h2d(np.ascontiguousarray(xq, dtype=np.float64).tobytes(), drefx)
+        cudart.h2d(np.ascontiguousarray(route, dtype=np.float64).tobytes(), dref_route)
+        cudart.memset0(dy, tokens * HIDDEN * 2)
+        cudart.memset0(drefy, tokens * HIDDEN * 8)
+        if kind == "nvfp4":
+            da13 = cudart.alloc(4)
+            da2 = cudart.alloc(4)
+            cudart.h2d(np.ascontiguousarray(bank["amax13"][:1]).tobytes(), da13)
+            cudart.h2d(np.ascontiguousarray(bank["amax2"][:1]).tobytes(), da2)
+            denom = float(bank["denom13"])
+        else:
+            denom = 1.0
+        peer.expert_each(
+            kind, tokens, 1, 1, HIDDEN, INTER, dx, dids, droute,
+            ptrs["w13"].ctypes.data, ptrs["s13"].ctypes.data, da13,
+            ptrs["w2"].ctypes.data, ptrs["s2"].ctypes.data, da2, denom, dy, None)
+        cudart.sync()
+        peer.reference(
+            kind, tokens, 1, HIDDEN, INTER, drefx, dids, dref_route,
+            view["w13"], view["s13"], da13, view["w2"], view["s2"], da2, denom, dscratch, drefy)
+        cudart.sync()
+        got = _bf16_to_f32(cudart.d2h(dy, tokens * HIDDEN * 2)).reshape(tokens, HIDDEN)
+        ref = np.frombuffer(cudart.d2h(drefy, tokens * HIDDEN * 8), dtype=np.float64).reshape(tokens, HIDDEN).copy()
+    finally:
+        for ptr in (dx, dids, droute, dy, drefx, dref_route, dscratch, drefy, da13, da2):
+            cudart.free(ptr)
+    return judge(ref, got)
+
+
+def _one_expert_bank(bank: dict, expert: int) -> dict:
+    local = bank["members"].index(expert)
+    out = {"kind": bank["kind"], "members": [expert], "n": 1}
+    for key in ("w13", "s13", "w2", "s2"):
+        span = bank[key].nbytes // bank["n"]
+        out[key] = np.ascontiguousarray(bank[key][local * span:(local + 1) * span])
+    if bank["kind"] == "nvfp4":
+        out["amax13"] = bank["amax13"][local:local + 1]
+        out["amax2"] = bank["amax2"][local:local + 1]
+        out["denom13"] = bank["denom13"]
+        out["denom2"] = bank["denom2"]
+    return out
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--model-dir", default=os.environ.get("INKLING2_MODEL_DIR", "/data/models/Inkling-2-Small"))
@@ -173,6 +271,8 @@ def main() -> None:
                     f"(bytes: one expert's packed weights and scales, plus bf16 x and y; "
                     f"time includes the launch's workspace alloc)",
                     flush=True)
+        if "GB300" in name:
+            _spill_cases(peer, a.model_dir)
     if failed:
         raise SystemExit(f"{failed} cases failed")
     print("validate: all cases passed", flush=True)

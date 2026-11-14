@@ -38,7 +38,8 @@ is not copied here as a forecast.
   `./inkling2 validate` is the device diff. `./inkling2 m3` is the first GPU
   window. The GEMMs stay off unless `INKLING2_ALLOW_UNVALIDATED=1`. Hot
   experts use the sm_103a object in-process, cold experts use the sm_120a
-  object in the sidecar, and Grace spill stays on the CPU.
+  object in the sidecar, and Grace spill is staged into a GB300 LRU by the
+  copy engine (`INKLING2_SPILL_CPU=1` keeps the fp64 host fallback).
 * The vLLM hook (`peer/hook.py`, `routing/collect.py`) against image
   `vllm/vllm-openai:inkling-2-small` or PR
   [vllm#67325](https://github.com/vllm-project/vllm/pull/67325) head `d664cd1e`.

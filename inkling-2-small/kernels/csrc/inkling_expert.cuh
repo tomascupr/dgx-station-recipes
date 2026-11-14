@@ -24,10 +24,15 @@ struct Buf {
 };
 
 template <class Gemm, class ElementA, class ElementB, class Scale, int Block, bool IsNvfp4>
+// w13_each, when set, is a host array of device pointers, one per expert.
+// The contiguous bases are ignored for any tensor whose each-pointer is set.
+// Hot experts in HBM and spill experts staged from Grace then share one launch.
 int forward(int tokens, int topk, int experts, int hidden, int inter, const __nv_bfloat16* x,
             const int* ids, const float* route, const uint8_t* w13, const uint8_t* s13, const float* amax13,
             const uint8_t* w2, const uint8_t* s2, const float* amax2, float denom, __nv_bfloat16* y,
-            cudaStream_t stream) {
+            cudaStream_t stream, const uint8_t* const* w13_each = nullptr,
+            const uint8_t* const* s13_each = nullptr, const uint8_t* const* w2_each = nullptr,
+            const uint8_t* const* s2_each = nullptr) {
   if (tokens <= 0) return 0;
   if (hidden % 128 || inter % 128) return 2;
   const int tile_k = IsNvfp4 ? arch::kNvfp4TileK : arch::kMxfp8TileK;
@@ -121,9 +126,14 @@ int forward(int tokens, int topk, int experts, int hidden, int inter, const __nv
                                                        x_sf.as<uint8_t>(), total, hidden);
   }
 
-  auto group_ptrs = [&](const uint8_t* base, int bytes_per_expert, std::vector<const void*>& out) {
+  auto group_ptrs = [&](const uint8_t* base, const uint8_t* const* each, int bytes_per_expert,
+                        std::vector<const void*>& out) {
     out.resize(groups);
-    for (int g = 0; g < groups; ++g) out[g] = base + static_cast<size_t>(used[g]) * bytes_per_expert;
+    for (int g = 0; g < groups; ++g) {
+      const int e = used[g];
+      out[g] = each ? static_cast<const void*>(each[e])
+                    : static_cast<const void*>(base + static_cast<size_t>(e) * bytes_per_expert);
+    }
   };
   std::vector<const void*> a13, s13p, b13, sb13, a2, s2p, b2, sb2;
   std::vector<void*> d13, d2;
@@ -131,10 +141,10 @@ int forward(int tokens, int topk, int experts, int hidden, int inter, const __nv
   const int s13_bytes = (2 * inter) * (hidden / Block);
   const int w2_bytes = hidden * (inter / pack);
   const int s2_bytes = hidden * (inter / Block);
-  group_ptrs(w13, w13_bytes, a13);
-  group_ptrs(s13, s13_bytes, s13p);
-  group_ptrs(w2, w2_bytes, a2);
-  group_ptrs(s2, s2_bytes, s2p);
+  group_ptrs(w13, w13_each, w13_bytes, a13);
+  group_ptrs(s13, s13_each, s13_bytes, s13p);
+  group_ptrs(w2, w2_each, w2_bytes, a2);
+  group_ptrs(s2, s2_each, s2_bytes, s2p);
 
   // Swizzle each group's stored scales. Weight scales do not depend on the
   // token count for their values, but the CUTLASS layout is a function of N,

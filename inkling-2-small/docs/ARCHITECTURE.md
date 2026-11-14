@@ -38,9 +38,13 @@ tensor. The GB300 loader's `coldskip` is that expert id not being in `hot`.
 `peer/segment.py` is one request in flight in `/dev/shm/inkling2-peer`
 (1,191,936 bytes at hidden 4608, 64 tokens, top-8). Hot experts call the
 sm_103a GEMM in-process. Cold experts cross the segment to the sm_120a GEMM
-in the sidecar. Spill experts stay on the CPU: the plan's Grace tier is a
-host dequant into the fp64 reference, not a host-mapped device GEMM and not
-a third GPU. None of the three run unless `INKLING2_ALLOW_UNVALIDATED=1`.
+in the sidecar. Spill experts stay in Grace memory. The SM103 GEMM loads weights with TMA,
+and the documented bulk path from Grace is the DMA copy engine, so a side
+stream prefetches the hit spill experts into a GB300 LRU
+(`INKLING2_SPILL_POOL_GIB`, default 4). That prefetch is started at attention
+entry from the previous token's hits. Hot and staged spill experts then share
+one grouped launch. `INKLING2_SPILL_CPU=1` keeps the fp64 host fallback.
+None of this runs unless `INKLING2_ALLOW_UNVALIDATED=1`.
 
 ## Where the 14 Nov plan is off
 
