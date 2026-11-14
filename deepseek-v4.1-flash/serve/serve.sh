@@ -321,7 +321,7 @@ start_vllm() {
               -e PEER3_PREBUILT=/fastpath/peer3/prebuilt -e VLLM_EXP_PEER3_SHM=/dev/shm/vllm_peer_tier3)
   local envf; envf=$(mktemp); trap "rm -f '$envf'" RETURN
   chmod 600 "$envf"; echo "VLLM_API_KEY=$(cat "$DS41_API_KEY_FILE")" > "$envf"
-  local spec=(--speculative-config '{"method":"dspark","num_speculative_tokens":5,"num_speculative_tokens_per_batch_size":[[1,4,5],[5,8,3],[9,32,3]],"draft_sample_method":"probabilistic","rejection_sample_method":"block"}')
+  local spec=(--speculative-config '{"method":"dspark","num_speculative_tokens":5,"num_speculative_tokens_per_batch_size":[[1,8,5],[9,32,3]],"draft_sample_method":"probabilistic","rejection_sample_method":"block"}')
   local offload=()
   if [ "$DS41_OFFLOAD_GB" != 0 ]; then offload=(--kv-offloading-size "$DS41_OFFLOAD_GB" --kv-offloading-backend native --kv-transfer-config "{\"kv_connector\":\"OffloadingConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"store_threshold\":$DS41_OFFLOAD_THRESHOLD}}"); fi
   local aliases; read -r -a aliases <<< "$DS41_ALIASES"
